@@ -1,6 +1,7 @@
 import express, { Request, Response, NextFunction } from "express";
 import dotenv from "dotenv";
 import { connectDB } from "./db";
+import transactionRoutes from "./routes/transactions";
 
 // Load environment variables
 dotenv.config();

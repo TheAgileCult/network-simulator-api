@@ -11,12 +11,7 @@ interface CustomerData {
     cardType: string;
 }
 
-interface BalanceResultData {
-    balance: number;
-    accountType: string;
+interface LoginResultData {
+    token: string;
+    customer: CustomerData;
 }
-
-interface WithdrawalResultData {
-    withdrawnAmount: number;
-    remainingBalance: number;
-} 
