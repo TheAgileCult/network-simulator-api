@@ -1,17 +1,24 @@
-interface TransactionResult<T = unknown> {
-    success: boolean;
-    message: string;
-    data?: T;
+export interface TransactionResult<T = unknown> {
+  success: boolean;
+  message: string;
+  data?: T;
 }
 
-interface CustomerData {
-    id: string;
-    firstName: string;
-    lastName: string;
-    cardType: string;
+export interface CustomerData {
+  id: string;
+  firstName: string;
+  lastName: string;
+  cardType: string;
 }
 
-interface LoginResultData {
-    token: string;
-    customer: CustomerData;
+export interface LoginResultData {
+  token: string;
+  customer: CustomerData;
 }
+
+export interface BalanceResultData {
+  balance: number;
+  accountType: string;
+  token: string;
+}
+
