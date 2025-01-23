@@ -2,6 +2,7 @@ import { faker } from "@faker-js/faker";
 import { connectDB } from "../db";
 import { Customer } from "../models/customers";
 import bcrypt from "bcrypt";
+import { appLogger } from "../logger";
 
 const generateFakeCustomer = async () => {
     const pin = "1234";
@@ -67,7 +68,7 @@ const seedDatabase = async (count: number = 5) => {
 
         // Clear existing data
         await Customer.deleteMany({});
-        console.log("Cleared existing customer data");
+        appLogger.debug("Cleared existing customer data");
 
         // Generate and insert new customers
         const customers = [];
@@ -78,21 +79,22 @@ const seedDatabase = async (count: number = 5) => {
 
         await Customer.insertMany(customers);
 
-        console.log(`Successfully seeded database with ${count} customers`);
+        appLogger.debug(`Successfully seeded database with ${count} customers`);
 
         // Log the test data for reference
         customers.forEach((customer, index) => {
-            console.log(`Test Customer ${index + 1}:`, {
-                name: `${customer.firstName} ${customer.lastName}`,
-                cardNumber: customer.cards[0].cardNumber,
-                accountNumber: customer.accounts[0].accountNumber,
-                pin: "1234" // Log the default PIN for testing
-            });
+          appLogger.log(`Test Customer ${index + 1}:`, {
+            name: `${customer.firstName} ${customer.lastName}`,
+            email: customer.email,
+            cardNumber: customer.cards[0].cardNumber,
+            accountNumber: customer.accounts[0].accountNumber,
+            pin: "1234", // Log the default PIN for testing
+          });
         });
 
         process.exit(0);
     } catch (error) {
-        console.error("Error seeding database:", error);
+        appLogger.error("Error seeding database:", error);
         process.exit(1);
     }
 };
