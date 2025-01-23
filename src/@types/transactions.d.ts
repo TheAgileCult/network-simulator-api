@@ -22,3 +22,9 @@ export interface BalanceResultData {
   token: string;
 }
 
+export interface WithdrawalResultData {
+  withdrawnAmount: number;
+  remainingBalance: number;
+  token: string;
+} 
+
