@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { TransactionService } from "../services/transactions";
+import { appLogger } from "../logger";
 
 const router = Router();
 
@@ -16,7 +17,7 @@ router.post("/login", async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
-        console.log("Login request received", { cardNumber });
+        appLogger.debug("Login request received", { cardNumber });
 
         const result = await TransactionService.login(
             cardNumber,
@@ -26,7 +27,7 @@ router.post("/login", async (req: Request, res: Response): Promise<void> => {
 
         res.status(result.success ? 200 : 401).json(result);
     } catch (error) {
-        console.error("Error in login route:", error);
+        appLogger.error("Error in login route:", error);
         res.status(500).json({
             success: false,
             message: "Internal server error"

@@ -1,6 +1,7 @@
 import { Customer } from "../models/customers";
 import jwt from "jsonwebtoken";
 import { Types } from "mongoose";
+import { appLogger } from "../logger";
 
 const JWT_SECRET = process.env.JWT_SECRET || "default-secret-key";
 const JWT_EXPIRATION = process.env.JWT_EXPIRATION || "1h";
@@ -12,12 +13,12 @@ export class TransactionService {
         expiryDate?: Date
     ): Promise<TransactionResult<LoginResultData>> {
         try {
-            console.log("Login attempt initiated", { cardNumber });
+            appLogger.debug("Login attempt initiated", { cardNumber });
 
             const customer = await Customer.findOne({ "cards.cardNumber": cardNumber });
 
             if (!customer) {
-                console.error("Login failed: Card not found", { cardNumber });
+                appLogger.error("Login failed: Card not found", { cardNumber });
                 return {
                     success: false,
                     message: "Card not found"
@@ -27,7 +28,7 @@ export class TransactionService {
             const card = customer.cards.find(c => c.cardNumber === cardNumber);
 
             if (!card) {
-                console.error("Login failed: Card not found in customer record", { cardNumber });
+                appLogger.error("Login failed: Card not found in customer record", { cardNumber });
                 return {
                     success: false,
                     message: "Card not found"
@@ -35,7 +36,7 @@ export class TransactionService {
             }
 
             if (card.isBlocked) {
-                console.error("Login failed: Card is blocked", { cardNumber });
+                appLogger.error("Login failed: Card is blocked", { cardNumber });
                 return {
                     success: false,
                     message: "Card is blocked"
@@ -43,7 +44,7 @@ export class TransactionService {
             }
 
             if (card.expiryDate < new Date()) {
-                console.error("Login failed: Card is expired", { cardNumber });
+                appLogger.error("Login failed: Card is expired", { cardNumber });
                 return {
                     success: false,
                     message: "Card is expired"
@@ -51,7 +52,7 @@ export class TransactionService {
             }
 
             if (expiryDate && card.expiryDate.getTime() !== new Date(expiryDate).getTime()) {
-                console.error("Login failed: Invalid expiry date", { cardNumber });
+                appLogger.error("Login failed: Invalid expiry date", { cardNumber });
                 return {
                     success: false,
                     message: "Invalid expiry date"
@@ -61,7 +62,7 @@ export class TransactionService {
             const isValid = await customer.validatePin(cardNumber, pin);
 
             if (!isValid) {
-                console.error("Login failed: Invalid PIN", { cardNumber });
+                appLogger.error("Login failed: Invalid PIN", { cardNumber });
                 return {
                     success: false,
                     message: "Invalid PIN"
@@ -83,7 +84,7 @@ export class TransactionService {
             card.lastUsed = new Date();
             await customer.save();
 
-            console.log("Login successful", {
+            appLogger.debug("Login successful", {
                 cardNumber,
                 customerId: customer._id
             });
@@ -102,7 +103,7 @@ export class TransactionService {
                 }
             };
         } catch (error) {
-            console.error("Error during login:", error);
+            appLogger.error("Error during login:", error);
             return {
                 success: false,
                 message: "Error processing login request"
