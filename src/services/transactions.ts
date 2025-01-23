@@ -8,8 +8,7 @@ const JWT_EXPIRATION = process.env.JWT_EXPIRATION || "1h";
 export class TransactionService {
     static async login(
         cardNumber: string,
-        pin: string,
-        expiryDate?: Date
+        pin: string
     ): Promise<TransactionResult<LoginResultData>> {
         try {
             console.log("Login attempt initiated", { cardNumber });
@@ -50,16 +49,7 @@ export class TransactionService {
                 };
             }
 
-            if (expiryDate && card.expiryDate.getTime() !== new Date(expiryDate).getTime()) {
-                console.error("Login failed: Invalid expiry date", { cardNumber });
-                return {
-                    success: false,
-                    message: "Invalid expiry date"
-                };
-            }
-
             const isValid = await customer.validatePin(cardNumber, pin);
-
             if (!isValid) {
                 console.error("Login failed: Invalid PIN", { cardNumber });
                 return {

@@ -25,10 +25,6 @@ const CardSchema = new Schema<ICard>({
         required: true,
         enum: ["debit", "credit"]
     },
-    cvv: {
-        type: String,
-        required: true
-    },
     dailyWithdrawalLimit: {
         type: Number,
         required: true,
@@ -63,50 +59,6 @@ const AccountSchema = new Schema<IAccount>({
         type: String,
         required: true,
         default: "USD"
-    },
-    interestRate: {
-        type: Number,
-        required: function () {
-            return this.accountType === "savings" || this.accountType === "loan";
-        }
-    },
-    creditLimit: {
-        type: Number,
-        required: function () {
-            return this.accountType === "credit";
-        }
-    },
-    loanAmount: {
-        type: Number,
-        required: function () {
-            return this.accountType === "loan";
-        }
-    },
-    loanStartDate: {
-        type: Date,
-        required: function () {
-            return this.accountType === "loan";
-        }
-    },
-    loanEndDate: {
-        type: Date,
-        required: function () {
-            return this.accountType === "loan";
-        }
-    },
-    minimumBalance: {
-        type: Number,
-        required: true,
-        default: 0
-    },
-    isActive: {
-        type: Boolean,
-        required: true,
-        default: true
-    },
-    lastTransaction: {
-        type: Date,
-        default: Date.now
     }
 });
 
@@ -123,53 +75,13 @@ const CustomerSchema = new Schema<ICustomerDocument>({
         type: Date,
         required: true
     },
-    email: {
-        type: String,
-        required: true,
-        unique: true
-    },
-    phoneNumber: {
-        type: String,
-        required: true
-    },
     address: {
         type: String,
         required: true
     },
     accounts: [AccountSchema],
     cards: [CardSchema],
-    transactions: [TransactionSchema],
-    identificationNumber: {
-        type: String,
-        required: true,
-        unique: true
-    },
-    nationality: {
-        type: String,
-        required: true
-    },
-    employmentStatus: {
-        type: String,
-        required: true
-    },
-    annualIncome: {
-        type: Number,
-        required: true
-    },
-    creditScore: {
-        type: Number,
-        required: true,
-        min: 300,
-        max: 850
-    },
-    isBlacklisted: {
-        type: Boolean,
-        default: false
-    },
-    preferredLanguage: {
-        type: String,
-        default: "en"
-    }
+    transactions: [TransactionSchema]
 }, {
     timestamps: true
 });
