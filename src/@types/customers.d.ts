@@ -5,7 +5,6 @@ declare global {
         cardNumber: string;
         expiryDate: Date;
         pin: string;
-        cardType: "debit" | "credit";
         dailyWithdrawalLimit: number;
         isBlocked: boolean;
         lastUsed: Date;

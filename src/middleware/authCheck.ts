@@ -1,99 +1,160 @@
 import { Response, NextFunction } from "express";
-import { Customer } from "../models/customers";
-import { transactionLogger, appLogger, errorLogger } from "../logger";
+import { transactionLogger, errorLogger, appLogger } from "../logger";
 import jwt from "jsonwebtoken";
-import dotenv from "dotenv";
-import { AuthenticatedRequest, JwtPayload } from "../@types/auth";
-
-dotenv.config();
+import CustomerRepository from "../repositories/customers";
+import { TransactionResponse } from "../enums";
 
 const JWT_SECRET = process.env.JWT_SECRET ?? "";
+const JWT_EXPIRATION = "1m";
 
 export const authCheck = async (
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
 ): Promise<void> => {
-  try {
-    // Check for token in Authorization header
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      res.status(401).json({
-        success: false,
-        message: "No token provided",
-      });
-      return;
-    }
-
-    const token = authHeader.split(" ")[1];
+    const endpoint = req.originalUrl;
+    const method = req.method;
+    
+    appLogger.info(`Incoming request to ${method} ${endpoint}`, {
+        endpoint,
+        method,
+        ip: req.ip,
+        userAgent: req.headers["user-agent"]
+    });
 
     try {
-      // Verify token
-      const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
-      req.user = decoded;
-      req.token = token;
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith("Bearer ")) {
+            errorLogger.warn("Authentication failed - No token provided", {
+                endpoint,
+                method,
+                ip: req.ip
+            });
+            res.status(401).json({
+                success: false,
+                message: "No token provided",
+                code: TransactionResponse.AUTH_FAILED
+            });
+            return;
+        }
 
-      // Find customer
-      const customer = await Customer.findById(decoded.customerId);
-      if (!customer) {
-        res.status(404).json({
-          success: false,
-          message: "Customer not found",
-        });
-        return;
-      }
+        try {
+            const token = authHeader.split(" ")[1];
+            const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;      
+            
+            appLogger.debug("Token verification successful", {
+                endpoint,
+                customerId: decoded.customerId
+            });
 
-      // Check if card exists and is not blocked
-      const card = customer.cards.find(
-        (c) => c.cardNumber === decoded.cardNumber
-      );
-      if (!card || card.isBlocked) {
-        res.status(401).json({
-          success: false,
-          message: "Card is invalid or blocked",
-        });
-        return;
-      }
+            const customer = await CustomerRepository.findCustomerById(decoded.customerId);
+            if (!customer) {
+                errorLogger.error("Authentication failed - Customer not found", {
+                    endpoint,
+                    customerId: decoded.customerId,
+                    ip: req.ip
+                });
+                res.status(404).json({
+                    success: false,
+                    message: "Customer not found",
+                    code: TransactionResponse.AUTH_FAILED
+                });
+                return;
+            }
 
-      // Check if card is expired
-      if (card.expiryDate < new Date()) {
-        res.status(401).json({
-          success: false,
-          message: "Card is expired",
-        });
-        return;
-      }
+            const card = customer.cards.find(
+                (c) => c.cardNumber === decoded.cardNumber
+            );
+            if (!card || card.isBlocked) {
+                errorLogger.error("Authentication failed - Card invalid or blocked", {
+                    endpoint,
+                    cardNumber: decoded.cardNumber,
+                    customerId: decoded.customerId,
+                    isBlocked: card?.isBlocked
+                });
+                res.status(401).json({
+                    success: false,
+                    message: "Card is invalid or blocked",
+                    code: TransactionResponse.AUTH_FAILED
+                });
+                return;
+            }
 
-      // Attach customer to request
-      req.customer = customer;
-      transactionLogger.info("Authentication successful", {
-        cardNumber: decoded.cardNumber,
-        customerId: decoded.customerId,
-      });
+            if (card.expiryDate < new Date()) {
+                errorLogger.error("Authentication failed - Card expired", {
+                    endpoint,
+                    cardNumber: decoded.cardNumber,
+                    customerId: decoded.customerId,
+                    expiryDate: card.expiryDate
+                });
+                res.status(401).json({
+                    success: false,
+                    message: "Card is expired",
+                    code: TransactionResponse.AUTH_FAILED
+                });
+                return;
+            }
 
-      next();
+            const newToken = jwt.sign(
+                {
+                    cardNumber: decoded.cardNumber,
+                    customerId: decoded.customerId
+                },
+                JWT_SECRET,
+                { expiresIn: JWT_EXPIRATION }
+            );
+            req.customer = customer;
+            req.newToken = newToken;
+
+            transactionLogger.info("Authentication successful", {
+                endpoint,
+                method,
+                cardNumber: decoded.cardNumber,
+                customerId: decoded.customerId,
+                ip: req.ip
+            });
+
+            next();
+        } catch (error) {
+            if (error instanceof jwt.JsonWebTokenError) {
+                errorLogger.error("Authentication failed - Invalid token", {
+                    endpoint,
+                    error: error.message,
+                    ip: req.ip
+                });
+                res.status(401).json({
+                    success: false,
+                    message: "Invalid token",
+                    code: TransactionResponse.AUTH_FAILED
+                });
+                return;
+            }
+            if (error instanceof jwt.TokenExpiredError) {
+                errorLogger.error("Authentication failed - Token expired", {
+                    endpoint,
+                    error: error.message,
+                    ip: req.ip
+                });
+                res.status(401).json({
+                    success: false,
+                    message: "Token expired",
+                    code: TransactionResponse.AUTH_FAILED
+                });
+                return;
+            }
+            throw error;
+        }
     } catch (error) {
-      if (error instanceof jwt.JsonWebTokenError) {
-        res.status(401).json({
-          success: false,
-          message: "Invalid token",
+        errorLogger.error("Critical authentication error", {
+            endpoint,
+            error: error instanceof Error ? error.message : "Unknown error",
+            stack: error instanceof Error ? error.stack : undefined,
+            ip: req.ip
         });
-        return;
-      }
-      if (error instanceof jwt.TokenExpiredError) {
-        res.status(401).json({
-          success: false,
-          message: "Token expired",
+        res.status(500).json({
+            success: false,
+            message: "Internal server error during authentication",
+            code: TransactionResponse.AUTH_FAILED
         });
-        return;
-      }
-      throw error;
     }
-  } catch (error) {
-    errorLogger.error("Authentication error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Internal server error during authentication",
-    });
-  }
 };

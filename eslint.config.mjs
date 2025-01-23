@@ -11,6 +11,7 @@ export default [
     "semi": ["error", "always"],
     "quotes": ["error", "double"],
     "eol-last": ["error", "always"],
+    "indent": ["error", 4],
     "@typescript-eslint/no-unused-vars": [
         "error",
         {

@@ -34,35 +34,16 @@ const generateFakeCustomer = async () => {
                 cardNumber,
                 expiryDate: faker.date.future(),
                 pin: hashedPin,
-                cardType: faker.helpers.arrayElement(["debit", "credit"]),
                 dailyWithdrawalLimit: 1000,
                 isBlocked: false,
                 lastUsed: faker.date.recent()
             }
         ],
-        transactions: Array.from({ length: 5 }, () => ({
-            transactionId: faker.string.uuid(),
-            type: faker.helpers.arrayElement([
-                "withdrawal",
-                "deposit",
-                "payment",
-                "inquiry"
-            ]),
-            amount: faker.number.float({ min: 10, max: 1000, fractionDigits: 2 }),
-            currency: "USD",
-            atmId: faker.string.uuid(),
-            timestamp: faker.date.recent(),
-            status: faker.helpers.arrayElement([
-                "completed",
-                "pending",
-                "failed"
-            ]),
-            description: faker.finance.transactionDescription(),
-        }))
+        transactions: []
     };
 };
 
-const seedDatabase = async (count: number = 5) => {
+const seedDatabase = async (count: number = 2) => {
     try {
         await connectDB();
 
@@ -83,13 +64,12 @@ const seedDatabase = async (count: number = 5) => {
 
         // Log the test data for reference
         customers.forEach((customer, index) => {
-          appLogger.log(`Test Customer ${index + 1}:`, {
-            name: `${customer.firstName} ${customer.lastName}`,
-            email: customer.email,
-            cardNumber: customer.cards[0].cardNumber,
-            accountNumber: customer.accounts[0].accountNumber,
-            pin: "1234", // Log the default PIN for testing
-          });
+            appLogger.log(`Test Customer ${index + 1}:`, {
+                name: `${customer.firstName} ${customer.lastName}`,
+                cardNumber: customer.cards[0].cardNumber,
+                accountNumber: customer.accounts[0].accountNumber,
+                pin: "1234", // Log the default PIN for testing
+            });
         });
 
         process.exit(0);

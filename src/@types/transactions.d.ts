@@ -1,30 +1,57 @@
-export interface TransactionResult<T = unknown> {
-  success: boolean;
-  message: string;
-  data?: T;
+declare global {
+    type ITransactionResponse = "NO_TOKEN_PROVIDED" | "AUTH_FAILED" | "WITHDRAWAL_FAILED" | "DEPOSIT_FAILED" | "BALANCE_FAILED";
+
+    interface BaseTransactionRequest {
+        transactionId: string;
+        cardNumber: string;
+        atmId: string;
+        pin: string;
+        expiryDate: string;
+    }
+
+    interface WithdrawalRequest extends BaseTransactionRequest {
+        amount: number;
+        currency: string;
+        accountType: string;
+    }
+
+    interface AuthRequest extends BaseTransactionRequest {
+        pin: string;
+    }
+
+    interface BalanceRequest extends BaseTransactionRequest {
+        accountType: string;
+    }
+
+    interface TransactionResult<T = unknown> {
+        success: boolean;
+        message: string;
+        data?: T;
+        code?: ITransactionResponse;
+    }
+
+    interface CustomerData {
+        id: string;
+        firstName: string;
+        lastName: string;
+    }
+
+    interface LoginResultData {
+        token: string;
+        customer: CustomerData;
+    }
+
+    interface BalanceResultData {
+        balance: number;
+        accountType: string;
+        token: string;
+    }
+
+    interface WithdrawalResultData {
+        withdrawnAmount: number;
+        remainingBalance: number;
+        token: string;
+    }
 }
 
-export interface CustomerData {
-  id: string;
-  firstName: string;
-  lastName: string;
-  cardType: string;
-}
-
-export interface LoginResultData {
-  token: string;
-  customer: CustomerData;
-}
-
-export interface BalanceResultData {
-  balance: number;
-  accountType: string;
-  token: string;
-}
-
-export interface WithdrawalResultData {
-  withdrawnAmount: number;
-  remainingBalance: number;
-  token: string;
-} 
-
+export {};

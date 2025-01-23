@@ -1,6 +1,5 @@
 import mongoose, { Schema } from "mongoose";
 import bcrypt from "bcrypt";
-import { TransactionSchema } from "./transactions";
 
 export interface ICustomerDocument extends ICustomer, mongoose.Document {
     validatePin(cardNumber: string, pin: string): Promise<boolean>;
@@ -19,11 +18,6 @@ const CardSchema = new Schema<ICard>({
     pin: {
         type: String,
         required: true
-    },
-    cardType: {
-        type: String,
-        required: true,
-        enum: ["debit", "credit"]
     },
     dailyWithdrawalLimit: {
         type: Number,
@@ -81,7 +75,10 @@ const CustomerSchema = new Schema<ICustomerDocument>({
     },
     accounts: [AccountSchema],
     cards: [CardSchema],
-    transactions: [TransactionSchema]
+    transactions: [{
+        type: Schema.Types.ObjectId,
+        ref: "Transaction"
+    }]
 }, {
     timestamps: true
 });

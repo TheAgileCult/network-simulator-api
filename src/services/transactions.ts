@@ -1,243 +1,342 @@
-import { Customer } from "../models/customers";
 import jwt from "jsonwebtoken";
 import { Types } from "mongoose";
-import { appLogger } from "../logger";
 import { transactionLogger, errorLogger } from "../logger";
-import { LoginResultData, TransactionResult, WithdrawalResultData } from "../@types/transactions";
-
+import { TransactionType } from "../logger";
+import CustomerRepository from "../repositories/customers";
 
 const JWT_SECRET = process.env.JWT_SECRET || "default-secret-key";
 const JWT_EXPIRATION = process.env.JWT_EXPIRATION || "1h";
 
 export class TransactionService {
-  private static WITHDRAWAL_LIMIT = 1000;
+    private static WITHDRAWAL_LIMIT = 1000;
   
-  static async login(
-    cardNumber: string,
-    pin: string
-  ): Promise<TransactionResult<LoginResultData>> {
-    try {
-      appLogger.debug("Login attempt initiated", { cardNumber });
+    static async login(
+        cardNumber: string,
+        pin: string
+    ): Promise<TransactionResult<LoginResultData>> {
+        try {
+            transactionLogger.debug("Login attempt initiated", { 
+                cardNumber,
+                transactionType: TransactionType.AUTH
+            });
+            
+            const customer = await CustomerRepository.findCustomerByCardNumber(cardNumber);
+            if (!customer) {
+                const errorMsg = "Login failed: Card number not found";
+                transactionLogger.error(errorMsg, { 
+                    cardNumber,
+                    transactionType: TransactionType.AUTH
+                });
+                errorLogger.error(errorMsg, { cardNumber });
+                return {
+                    success: false,
+                    message: errorMsg,
+                };
+            }
 
-      const customer = await Customer.findOne({
-        "cards.cardNumber": cardNumber,
-      });
+            const card = customer.cards.find((c) => c.cardNumber === cardNumber);
 
-      if (!customer) {
-        appLogger.error("Login failed: Card not found", { cardNumber });
-        return {
-          success: false,
-          message: "Card not found",
-        };
-      }
+            if (!card) {
+                const errorMsg = "Login failed: Card not found in customer record";
+                transactionLogger.error(errorMsg, {
+                    cardNumber,
+                    transactionType: TransactionType.AUTH
+                });
+                errorLogger.error(errorMsg, { cardNumber });
+                return {
+                    success: false,
+                    message: errorMsg,
+                };
+            }
 
-      const card = customer.cards.find((c) => c.cardNumber === cardNumber);
+            if (card.isBlocked) {
+                const errorMsg = "Login failed: Card is blocked";
+                transactionLogger.error(errorMsg, { 
+                    cardNumber,
+                    transactionType: TransactionType.AUTH
+                });
+                errorLogger.error(errorMsg, { cardNumber });
+                return {
+                    success: false,
+                    message: errorMsg,
+                };
+            }
 
-      if (!card) {
-        appLogger.error("Login failed: Card not found in customer record", {
-          cardNumber,
-        });
-        return {
-          success: false,
-          message: "Card not found",
-        };
-      }
+            if (card.expiryDate < new Date()) {
+                const errorMsg = "Login failed: Card is expired";
+                transactionLogger.error(errorMsg, { 
+                    cardNumber,
+                    expiryDate: card.expiryDate,
+                    transactionType: TransactionType.AUTH
+                });
+                errorLogger.error(errorMsg, { 
+                    cardNumber,
+                    expiryDate: card.expiryDate
+                });
+                return {
+                    success: false,
+                    message: errorMsg,
+                };
+            }
 
-      if (card.isBlocked) {
-        appLogger.error("Login failed: Card is blocked", { cardNumber });
-        return {
-          success: false,
-          message: "Card is blocked",
-        };
-      }
+            const isValid = await customer.validatePin(cardNumber, pin);
+            if (!isValid) {
+                const errorMsg = "Login failed: Invalid PIN";
+                transactionLogger.error(errorMsg, { 
+                    cardNumber,
+                    transactionType: TransactionType.AUTH
+                });
+                errorLogger.error(errorMsg, { cardNumber });
+                return {
+                    success: false,
+                    message: errorMsg,
+                };
+            }
 
-      if (card.expiryDate < new Date()) {
-        appLogger.error("Login failed: Card is expired", { cardNumber });
-        return {
-          success: false,
-          message: "Card is expired",
-        };
-      }
+            // Generate JWT token
+            const token = jwt.sign(
+                {
+                    cardNumber,
+                    customerId: customer._id,
+                },
+                JWT_SECRET,
+                { expiresIn: JWT_EXPIRATION }
+            );
 
-      const isValid = await customer.validatePin(cardNumber, pin);
-      if (!isValid) {
-        appLogger.error("Login failed: Invalid PIN", { cardNumber });
-        return {
-          success: false,
-          message: "Invalid PIN",
-        };
-      }
+            // Update last used timestamp
+            card.lastUsed = new Date();
+            await customer.save();
 
-      // Generate JWT token
-      const token = jwt.sign(
-        {
-          cardNumber,
-          customerId: customer._id,
-          cardType: card.cardType,
-        },
-        JWT_SECRET,
-        { expiresIn: JWT_EXPIRATION }
-      );
+            transactionLogger.info("Login successful", {
+                cardNumber,
+                customerId: customer._id,
+                transactionType: TransactionType.AUTH
+            });
 
-      // Update last used timestamp
-      card.lastUsed = new Date();
-      await customer.save();
-
-      appLogger.debug("Login successful", {
-        cardNumber,
-        customerId: customer._id,
-      });
-
-      return {
-        success: true,
-        message: "Login successful",
-        data: {
-          token,
-          customer: {
-            id: (customer._id as Types.ObjectId).toString(),
-            firstName: customer.firstName,
-            lastName: customer.lastName,
-            cardType: card.cardType,
-          },
-        },
-      };
-    } catch (error) {
-      appLogger.error("Error during login:", error);
-      return {
-        success: false,
-        message: "Error processing login request",
-      };
+            return {
+                success: true,
+                message: "Login successful",
+                data: {
+                    token,
+                    customer: {
+                        id: (customer._id as Types.ObjectId).toString(),
+                        firstName: customer.firstName,
+                        lastName: customer.lastName,
+                    },
+                },
+            };
+        } catch (error) {
+            const errorMsg = "Error during login";
+            transactionLogger.error(errorMsg, {
+                cardNumber,
+                error: error instanceof Error ? error.message : "Unknown error",
+                transactionType: TransactionType.AUTH
+            });
+            errorLogger.error(errorMsg, {
+                cardNumber,
+                error: error instanceof Error ? error.message : "Unknown error"
+            });
+            return {
+                success: false,
+                message: "Error processing login request",
+            };
+        }
     }
-  }
 
-  private static verifyToken(token: string): {
-    valid: boolean;
-    expired?: boolean;
-    decoded?: any;
-  } {
-    try {
-      const decoded = jwt.verify(token, JWT_SECRET);
-      return { valid: true, decoded };
-    } catch (error) {
-      if (error instanceof jwt.TokenExpiredError) {
-        return { valid: false, expired: true };
-      }
-      return { valid: false };
+    static async withdraw(
+        cardNumber: string,
+        accountType: string,
+        amount: number,
+        customer: ICustomer
+    ): Promise<TransactionResult<WithdrawalResultData>> {
+        try {
+            transactionLogger.debug("Withdrawal initiated", {
+                cardNumber,
+                accountType,
+                amount,
+                transactionType: TransactionType.WITHDRAWAL
+            });
+
+            // Validate withdrawal amount
+            if (!this.isValidWithdrawalAmount(amount)) {
+                const errorMsg = "Invalid withdrawal amount";
+                transactionLogger.error(errorMsg, {
+                    cardNumber,
+                    amount,
+                    transactionType: TransactionType.WITHDRAWAL
+                });
+                errorLogger.error(errorMsg, {
+                    cardNumber,
+                    amount
+                });
+                return {
+                    success: false,
+                    message: errorMsg
+                };
+            }
+
+            const account = customer.accounts.find(
+                (acc) => acc.accountType === accountType
+            );
+
+            if (!account) {
+                const errorMsg = "Account not found";
+                transactionLogger.error(errorMsg, { 
+                    accountType,
+                    transactionType: TransactionType.WITHDRAWAL
+                });
+                errorLogger.error(errorMsg, { accountType });
+                return {
+                    success: false,
+                    message: errorMsg
+                };
+            }
+
+            // Check sufficient balance
+            if (account.balance < amount) {
+                const errorMsg = "Insufficient funds";
+                transactionLogger.error(errorMsg, {
+                    cardNumber,
+                    accountType,
+                    requested: amount,
+                    available: account.balance,
+                    transactionType: TransactionType.WITHDRAWAL
+                });
+                errorLogger.error(errorMsg, {
+                    cardNumber,
+                    accountType,
+                    requested: amount,
+                    available: account.balance
+                });
+                return {
+                    success: false,
+                    message: errorMsg
+                };
+            }
+
+            // Process withdrawal
+            account.balance -= amount;
+            await customer.save();
+
+            transactionLogger.info("Withdrawal processed successfully", {
+                cardNumber,
+                accountType,
+                amount,
+                newBalance: account.balance,
+                transactionType: TransactionType.WITHDRAWAL
+            });
+
+            return {
+                success: true,
+                message: "Withdrawal successful",
+                data: {
+                    withdrawnAmount: amount,
+                    remainingBalance: account.balance,
+                    token: jwt.sign(
+                        {
+                            cardNumber,
+                            customerId: customer._id,
+                        },
+                        JWT_SECRET,
+                        { expiresIn: JWT_EXPIRATION }
+                    )
+                }
+            };
+        } catch (error) {
+            const errorMsg = "Error processing withdrawal";
+            transactionLogger.error(errorMsg, {
+                cardNumber,
+                accountType,
+                amount,
+                error: error instanceof Error ? error.message : "Unknown error",
+                transactionType: TransactionType.WITHDRAWAL
+            });
+            errorLogger.error(errorMsg, {
+                cardNumber,
+                accountType,
+                amount,
+                error: error instanceof Error ? error.message : "Unknown error"
+            });
+            return {
+                success: false,
+                message: errorMsg
+            };
+        }
     }
-  }
 
-  static async withdraw(
-    cardNumber: string,
-    accountNumber: string,
-    amount: number,
-    token?: string
-  ): Promise<TransactionResult<WithdrawalResultData>> {
-    try {
-      // Verify and decode the token
-      const tokenStatus = this.verifyToken(token || "");
-      if (!token || !tokenStatus.valid) {
-        return {
-          success: false,
-          message: tokenStatus.expired
-            ? "Session expired - please login again"
-            : "Authentication failed - please login again",
-        };
-      }
-
-      // Validate withdrawal amount
-      if (!this.isValidWithdrawalAmount(amount)) {
-        errorLogger.error("Invalid withdrawal amount", {
-          cardNumber,
-          amount,
-        });
-        return {
-          success: false,
-          message: "Invalid withdrawal amount",
-        };
-      }
-
-      // Find the customer
-      const customer = await Customer.findOne({
-        "cards.cardNumber": cardNumber,
-      });
-
-      if (!customer) {
-        errorLogger.error("Customer not found", { cardNumber });
-        return {
-          success: false,
-          message: "Customer not found",
-        };
-      }
-
-      // Find the account
-      const account = customer.accounts.find(
-        (acc) => acc.accountNumber === accountNumber
-      );
-
-      if (!account) {
-        errorLogger.error("Account not found", { accountNumber });
-        return {
-          success: false,
-          message: "Account not found",
-        };
-      }
-
-      // Check sufficient balance
-      if (account.balance < amount) {
-        errorLogger.error("Insufficient funds", {
-          cardNumber,
-          accountNumber,
-          requested: amount,
-          available: account.balance,
-        });
-        return {
-          success: false,
-          message: "Insufficient funds",
-        };
-      }
-
-      // Process withdrawal
-      account.balance -= amount;
-      await customer.save();
-
-      // Create new token for refresh
-      const newToken = jwt.sign(
-        {
-          cardNumber,
-          customerId: customer._id,
-          cardType: customer.cards.find((c) => c.cardNumber === cardNumber)
-            ?.cardType,
-        },
-        JWT_SECRET,
-        { expiresIn: JWT_EXPIRATION }
-      );
-
-      transactionLogger.info("Withdrawal processed successfully", {
-        cardNumber,
-        accountNumber,
-        amount,
-        newBalance: account.balance,
-      });
-
-      return {
-        success: true,
-        message: "Withdrawal successful",
-        data: {
-          withdrawnAmount: amount,
-          remainingBalance: account.balance,
-          token: newToken, // Include the refreshed token
-        },
-      };
-    } catch (error) {
-      errorLogger.error("Error processing withdrawal:", error);
-      return {
-        success: false,
-        message: "Error processing withdrawal",
-      };
+    private static isValidWithdrawalAmount(amount: number): boolean {
+        return amount > 0 && amount <= this.WITHDRAWAL_LIMIT;
     }
-  }
 
-  private static isValidWithdrawalAmount(amount: number): boolean {
-    return amount > 0 && amount <= this.WITHDRAWAL_LIMIT;
-  }
+    static async checkBalance(
+        cardNumber: string,
+        accountType: string,
+        customer: ICustomer
+    ): Promise<TransactionResult<BalanceResultData>> {
+        try {
+            transactionLogger.debug("Balance check initiated", {
+                cardNumber,
+                accountType,
+                transactionType: TransactionType.BALANCE
+            });
+
+            const account = customer.accounts.find(
+                (acc) => acc.accountType === accountType
+            );
+
+            if (!account) {
+                const errorMsg = "Account not found";
+                transactionLogger.error(errorMsg, { 
+                    accountType,
+                    transactionType: TransactionType.BALANCE
+                });
+                errorLogger.error(errorMsg, { accountType });
+                return {
+                    success: false,
+                    message: errorMsg
+                };
+            }
+
+            transactionLogger.info("Balance check successful", {
+                cardNumber,
+                accountType,
+                balance: account.balance,
+                transactionType: TransactionType.BALANCE
+            });
+
+            return {
+                success: true,
+                message: "Balance retrieved successfully",
+                data: {
+                    balance: account.balance,
+                    accountType: account.accountType,
+                    token: jwt.sign(
+                        {
+                            cardNumber,
+                            customerId: customer._id,
+                        },
+                        JWT_SECRET,
+                        { expiresIn: JWT_EXPIRATION }
+                    )
+                }
+            };
+        } catch (error) {
+            const errorMsg = "Error checking balance";
+            transactionLogger.error(errorMsg, {
+                cardNumber,
+                accountType,
+                error: error instanceof Error ? error.message : "Unknown error",
+                transactionType: TransactionType.BALANCE
+            });
+            errorLogger.error(errorMsg, {
+                cardNumber,
+                accountType,
+                error: error instanceof Error ? error.message : "Unknown error"
+            });
+            return {
+                success: false,
+                message: errorMsg
+            };
+        }
+    }
 } 
