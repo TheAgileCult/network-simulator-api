@@ -6,7 +6,8 @@
   "scripts": {
     "start": "tsx src/index.ts",
     "dev": "tsx watch src/index.ts",
-    "seed": "tsx src/scripts/seed-db.ts"
+    "seed": "tsx src/scripts/seed-db.ts",
+    "build": "tsc"
   },
   "keywords": [],
   "author": "",
