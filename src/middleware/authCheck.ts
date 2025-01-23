@@ -5,7 +5,7 @@ import CustomerRepository from "../repositories/customers";
 import { TransactionResponse } from "../enums";
 
 const JWT_SECRET = process.env.JWT_SECRET ?? "";
-const JWT_EXPIRATION = "1m";
+const JWT_EXPIRATION = 60000;
 
 export const authCheck = async (
     req: AuthenticatedRequest,
