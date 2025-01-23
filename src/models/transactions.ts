@@ -10,15 +10,17 @@ export const TransactionSchema = new Schema<ITransaction>({
     type: {
         type: String,
         required: true,
-        enum: ["withdrawal", "deposit", "transfer", "payment"]
+        enum: ["withdrawal", "deposit", "payment", "inquiry"]
     },
     amount: {
         type: Number,
-        required: true
+        required: false
     },
     currency: {
         type: String,
-        required: true,
+        required: function() {
+            return this.type !== "inquiry";
+        },
         default: "USD"
     },
     timestamp: {
@@ -31,6 +33,8 @@ export const TransactionSchema = new Schema<ITransaction>({
         required: true,
         enum: ["pending", "completed", "failed"]
     },
-    description: String,
-    location: String
+    atmId: {
+        type: String,
+        required: true
+    }
 });

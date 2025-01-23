@@ -11,55 +11,23 @@ const generateFakeCustomer = async () => {
 
     const accountNumber = faker.string.numeric(12);
     const cardNumber = faker.string.numeric(16);
-    const cvv = faker.string.numeric(3);
-
     const accountTypes = ["checking", "savings", "credit", "loan"] as const;
     const selectedAccountType = faker.helpers.arrayElement(accountTypes);
 
-    const account = {
+    const account: IAccount = {
         accountNumber,
         accountType: selectedAccountType,
         balance: faker.number.float({ min: 1000, max: 10000, fractionDigits: 2 }),
         currency: "USD",
-        minimumBalance: 0,
         isActive: true,
         lastTransaction: faker.date.recent(),
-        interestRate: selectedAccountType === "savings" || selectedAccountType === "loan"
-            ? faker.number.float({ min: 0.01, max: 0.1, fractionDigits: 4 })
-            : undefined,
-        creditLimit: selectedAccountType === "credit"
-            ? faker.number.float({ min: 1000, max: 50000, fractionDigits: 2 })
-            : undefined,
-        loanAmount: selectedAccountType === "loan"
-            ? faker.number.float({ min: 5000, max: 100000, fractionDigits: 2 })
-            : undefined,
-        loanStartDate: selectedAccountType === "loan"
-            ? faker.date.past()
-            : undefined,
-        loanEndDate: selectedAccountType === "loan"
-            ? faker.date.future()
-            : undefined
     };
 
     return {
         firstName: faker.person.firstName(),
         lastName: faker.person.lastName(),
         dateOfBirth: faker.date.birthdate(),
-        email: faker.internet.email(),
-        phoneNumber: faker.phone.number(),
         address: faker.location.streetAddress(),
-        identificationNumber: faker.string.alphanumeric(10),
-        nationality: faker.location.country(),
-        employmentStatus: faker.helpers.arrayElement([
-            "employed",
-            "self-employed",
-            "unemployed",
-            "retired"
-        ]),
-        annualIncome: faker.number.float({ min: 20000, max: 200000, fractionDigits: 2 }),
-        creditScore: faker.number.int({ min: 300, max: 850 }),
-        isBlacklisted: false,
-        preferredLanguage: "en",
         accounts: [account],
         cards: [
             {
@@ -67,7 +35,6 @@ const generateFakeCustomer = async () => {
                 expiryDate: faker.date.future(),
                 pin: hashedPin,
                 cardType: faker.helpers.arrayElement(["debit", "credit"]),
-                cvv,
                 dailyWithdrawalLimit: 1000,
                 isBlocked: false,
                 lastUsed: faker.date.recent()
@@ -78,11 +45,12 @@ const generateFakeCustomer = async () => {
             type: faker.helpers.arrayElement([
                 "withdrawal",
                 "deposit",
-                "transfer",
-                "payment"
+                "payment",
+                "inquiry"
             ]),
             amount: faker.number.float({ min: 10, max: 1000, fractionDigits: 2 }),
             currency: "USD",
+            atmId: faker.string.uuid(),
             timestamp: faker.date.recent(),
             status: faker.helpers.arrayElement([
                 "completed",
@@ -90,7 +58,6 @@ const generateFakeCustomer = async () => {
                 "failed"
             ]),
             description: faker.finance.transactionDescription(),
-            location: faker.location.city()
         }))
     };
 };
@@ -116,13 +83,13 @@ const seedDatabase = async (count: number = 5) => {
 
         // Log the test data for reference
         customers.forEach((customer, index) => {
-            appLogger.log(`Test Customer ${index + 1}:`, {
-              name: `${customer.firstName} ${customer.lastName}`,
-              email: customer.email,
-              cardNumber: customer.cards[0].cardNumber,
-              accountNumber: customer.accounts[0].accountNumber,
-              pin: "1234", // Log the default PIN for testing
-            });
+          appLogger.log(`Test Customer ${index + 1}:`, {
+            name: `${customer.firstName} ${customer.lastName}`,
+            email: customer.email,
+            cardNumber: customer.cards[0].cardNumber,
+            accountNumber: customer.accounts[0].accountNumber,
+            pin: "1234", // Log the default PIN for testing
+          });
         });
 
         process.exit(0);

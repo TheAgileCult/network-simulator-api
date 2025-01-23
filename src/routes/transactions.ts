@@ -7,8 +7,7 @@ const router = Router();
 // Login route
 router.post("/login", async (req: Request, res: Response): Promise<void> => {
     try {
-        const { cardNumber, pin, expiryDate } = req.body;
-
+        const { cardNumber, pin } = req.body;
         if (!cardNumber || !pin) {
             res.status(400).json({
                 success: false,
@@ -21,8 +20,7 @@ router.post("/login", async (req: Request, res: Response): Promise<void> => {
 
         const result = await TransactionService.login(
             cardNumber,
-            pin,
-            expiryDate ? new Date(expiryDate) : undefined
+            pin
         );
 
         res.status(result.success ? 200 : 401).json(result);
