@@ -2,11 +2,11 @@ services:
   app:
     build: .
     ports:
-      - "3000:3000"
+      - "3001:3001"
     environment:
       - MONGODB_URI=mongodb://mongodb:27017/atm-simulator
-      - JWT_SECRET=your-secret-key
-      - PORT=3000
+      - JWT_SECRET=hcuR6z3sxdA63YzW
+      - PORT=3001
     depends_on:
       - mongodb
     volumes:
