@@ -2,6 +2,7 @@ import express, { Request, Response, NextFunction } from "express";
 import dotenv from "dotenv";
 import { connectDB } from "./db";
 import transactionRoutes from "./routes/transactions";
+import accountRoutes from "./routes/accounts";
 import { appLogger } from "./logger";
 
 // Load environment variables
@@ -16,28 +17,29 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use("/api/transactions", transactionRoutes);
+app.use("/api/users", accountRoutes);
 
 // Error handling middleware
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-    appLogger.error(err.stack);
-    res.status(500).json({
-        success: false,
-        message: "Internal server error"
-    });
+  appLogger.error(err.stack);
+  res.status(500).json({
+    success: false,
+    message: "Internal server error",
+  });
 });
 
 // Start server
 const startServer = async () => {
-    try {
-        await connectDB();
-        
-        app.listen(port, () => {
-            appLogger.debug(`Server is running on port ${port}`);
-        });
-    } catch (error) {
-        appLogger.error("Error starting server:", error);
-        process.exit(1);
-    }
+  try {
+    await connectDB();
+
+    app.listen(port, () => {
+      appLogger.debug(`Server is running on port ${port}`);
+    });
+  } catch (error) {
+    appLogger.error("Error starting server:", error);
+    process.exit(1);
+  }
 };
 
-startServer(); 
+startServer();
