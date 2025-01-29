@@ -32,3 +32,9 @@ export enum TransactionResponse {
     DATABASE_ERROR = "DATABASE_ERROR",
     NETWORK_ERROR = "NETWORK_ERROR"
 }
+
+export enum NetworkType {
+    VISA = "VISA",
+    MASTERCARD = "MASTERCARD",
+    AMEX = "AMEX"
+}

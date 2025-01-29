@@ -1,12 +1,41 @@
 services:
-  app:
+  visa-network:
     build: .
     ports:
       - "3001:3001"
     environment:
-      - MONGODB_URI=mongodb://mongodb:27017/atm-simulator
+      - MONGODB_URI=mongodb://mongodb:27017/visa-network
       - JWT_SECRET=hcuR6z3sxdA63YzW
       - PORT=3001
+      - NETWORK_TYPE=VISA
+    depends_on:
+      - mongodb
+    volumes:
+      - ./logs:/app/logs
+
+  mastercard-network:
+    build: .
+    ports:
+      - "3002:3002"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/mastercard-network
+      - JWT_SECRET=hcuR6z3sxdA63YzW
+      - PORT=3002
+      - NETWORK_TYPE=MASTERCARD
+    depends_on:
+      - mongodb
+    volumes:
+      - ./logs:/app/logs
+
+  amex-network:
+    build: .
+    ports:
+      - "3003:3003"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/amex-network
+      - JWT_SECRET=hcuR6z3sxdA63YzW
+      - PORT=3003
+      - NETWORK_TYPE=AMEX
     depends_on:
       - mongodb
     volumes:
