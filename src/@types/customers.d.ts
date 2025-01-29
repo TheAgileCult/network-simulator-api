@@ -10,9 +10,11 @@ declare global {
         lastUsed: Date;
     }
 
+    type AccountType = "checking" | "savings" | "credit" | "loan";
+
     interface IAccount {
         accountNumber: string;
-        accountType: "checking" | "savings" | "credit" | "loan";
+        accountType: AccountType;
         balance: number;
         currency: string;
         isActive: boolean;

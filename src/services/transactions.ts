@@ -54,7 +54,6 @@ export class TransactionService {
             }
 
             const card = customer.cards.find((c) => c.cardNumber === cardNumber);
-
             if (!card) {
                 const errorMsg = "Login failed: Card not found in customer record";
                 transactionLogger.error(errorMsg, {
@@ -131,12 +130,12 @@ export class TransactionService {
             card.lastUsed = new Date();
             await customer.save();
 
-            transactionLogger.info("Login successful", {
-                cardNumber,
-                customerId: customer._id,
-                atmId,
-                transactionType: TransactionType.AUTH
-            });
+            // transactionLogger.info("Login successful", {
+            //     cardNumber,
+            //     customerId: customer._id,
+            //     atmId,
+            //     transactionType: TransactionType.AUTH
+            // });
 
             return {
                 success: true,
@@ -176,7 +175,7 @@ export class TransactionService {
 
     static async withdraw(
         cardNumber: string,
-        accountType: string,
+        accountType: AccountType,
         amount: number,
         customer: ICustomer,
         atmId: string
@@ -276,15 +275,15 @@ export class TransactionService {
             account.balance -= amount;
             await customer.save();
 
-            transactionLogger.info("Withdrawal processed successfully", {
-                cardNumber,
-                accountType,
-                amount,
-                newBalance: account.balance,
-                atmId,
-                atmLocation: atm.location,
-                transactionType: TransactionType.WITHDRAWAL
-            });
+            // transactionLogger.info("Withdrawal successful", {
+            //     cardNumber,
+            //     accountType,
+            //     amount,
+            //     newBalance: account.balance,
+            //     atmId,
+            //     atmLocation: atm.location,
+            //     transactionType: TransactionType.WITHDRAWAL
+            // });
 
             return {
                 success: true,
@@ -300,7 +299,8 @@ export class TransactionService {
                         },
                         JWT_SECRET,
                         { expiresIn: JWT_EXPIRATION }
-                    )
+                    ),
+                    atmLocation: atm.location
                 }
             };
         } catch (error) {
@@ -322,7 +322,7 @@ export class TransactionService {
 
     static async checkBalance(
         cardNumber: string,
-        accountType: string,
+        accountType: AccountType,
         customer: ICustomer,
         atmId: string
     ): Promise<TransactionResult<BalanceResultData>> {
@@ -389,7 +389,11 @@ export class TransactionService {
                         },
                         JWT_SECRET,
                         { expiresIn: JWT_EXPIRATION }
-                    )
+                    ),
+                    atm: {
+                        location: atm.location,
+                        currency: atm.supportedCurrency
+                    }
                 }
             };
         } catch (error) {
@@ -408,7 +412,120 @@ export class TransactionService {
         }
     }
 
+    static async deposit(
+        cardNumber: string,
+        amount: number,
+        customer: ICustomer,
+        atmId: string
+    ): Promise<TransactionResult<DepositResultData>> {
+        try {
+            transactionLogger.debug("Deposit initiated", {
+                cardNumber,
+                amount,
+                atmId,
+                transactionType: TransactionType.DEPOSIT
+            });
+
+            // Validate deposit amount
+            if (!this.isValidDepositAmount(amount)) {
+                const errorMsg = "Invalid deposit amount";
+                transactionLogger.error(errorMsg, {
+                    cardNumber,
+                    amount,
+                    atmId,
+                    transactionType: TransactionType.DEPOSIT
+                });
+                return {
+                    success: false,
+                    message: errorMsg
+                };
+            }
+
+            // Verify ATM exists
+            const atm = await ATMRepository.findATMById(atmId);
+            if (!atm) {
+                const errorMsg = "ATM not found";
+                transactionLogger.error(errorMsg, {
+                    cardNumber,
+                    atmId,
+                    transactionType: TransactionType.DEPOSIT
+                });
+                return {
+                    success: false,
+                    message: errorMsg
+                };
+            }
+
+            const account = customer.accounts.find((acc) => acc.accountType === "savings");
+            if (!account) {
+                const errorMsg = "Savings account not found";
+                transactionLogger.error(errorMsg, {
+                    atmId,
+                    transactionType: TransactionType.DEPOSIT
+                });
+                return {
+                    success: false,
+                    message: errorMsg
+                };
+            }
+
+            const newAtmAmount = atm.availableCash + amount;
+            await ATMRepository.updateATMCash(atmId, newAtmAmount);
+
+            account.balance += amount;
+            await customer.save();
+
+            // transactionLogger.info("Deposit processed successfully", {
+            //     cardNumber,
+            //     amount,
+            //     newBalance: account.balance,
+            //     atmId,
+            //     atmLocation: atm.location,
+            //     transactionType: TransactionType.DEPOSIT
+            // });
+
+            return {
+                success: true,
+                message: "Deposit successful",
+                data: {
+                    depositedAmount: amount,
+                    remainingBalance: account.balance,
+                    currency: atm.supportedCurrency,
+                    token: jwt.sign(
+                        {
+                            cardNumber,
+                            customerId: customer._id,
+                        },
+                        JWT_SECRET,
+                        { expiresIn: JWT_EXPIRATION }
+                    ),
+                    atm: {
+                        location: atm.location,
+                        currency: atm.supportedCurrency
+                    }
+                }
+            };
+        } catch (error) {
+            const errorMsg = "Error processing deposit";
+            transactionLogger.error(errorMsg, {
+                cardNumber,
+                amount,
+                atmId,
+                error: error instanceof Error ? error.message : "Unknown error",
+                transactionType: TransactionType.DEPOSIT
+            });
+            return {
+                success: false,
+                message: errorMsg
+            };
+        }
+    }
+
     private static isValidWithdrawalAmount(amount: number): boolean {
         return amount > 0 && amount <= this.WITHDRAWAL_LIMIT;
+    }
+
+    private static isValidDepositAmount(amount: number): boolean {
+        return amount > 0;
     }
 } 

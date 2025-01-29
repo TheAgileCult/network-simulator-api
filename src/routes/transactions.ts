@@ -19,21 +19,24 @@ interface ExtendedBalanceRequest extends AuthenticatedRequest {
     body: BalanceRequest;
 }
 
+interface ExtendedDepositRequest extends AuthenticatedRequest {
+    body: DepositRequest;
+}
+
 // Verify PIN and authenticate
 router.post("/auth", async (req: ExtendedAuthRequest, res: Response): Promise<void> => {
     const { cardNumber, pin, atmId, transactionId, expiryDate } = req.body;
 
     transactionLogger.info("Authentication request received", {
-        cardNumber,
-        atmId,
         transactionId,
+        cardNumber,
         expiryDate,
+        atmId,
         transactionType: TransactionType.AUTH
     });
 
     try {
         const result = await TransactionService.login(cardNumber, pin, atmId);
-        
         if (!result.success) {
             transactionLogger.error("Authentication failed", {
                 cardNumber,
@@ -54,11 +57,14 @@ router.post("/auth", async (req: ExtendedAuthRequest, res: Response): Promise<vo
         }
 
         transactionLogger.info("Authentication successful", {
-            cardNumber,
-            atmId,
             transactionId,
+            cardNumber,
+            expiryDate,
+            atmId,
+            transactionType: TransactionType.AUTH,
             customerId: result.data?.customer.id,
-            transactionType: TransactionType.AUTH
+            atmLocation: result.data?.atm.location,
+            atmCurrency: result.data?.atm.currency
         });
 
         res.json(result);
@@ -92,9 +98,9 @@ router.post("/withdraw", authCheck, async (req: ExtendedWithdrawalRequest, res: 
     const cardNumber = customer.cards[0].cardNumber;
 
     transactionLogger.info("Withdrawal request received", {
+        transactionId,
         cardNumber,
         atmId,
-        transactionId,
         amount,
         currency,
         accountType,
@@ -109,7 +115,6 @@ router.post("/withdraw", authCheck, async (req: ExtendedWithdrawalRequest, res: 
             customer,
             atmId
         );
-
         if (!result.success) {
             transactionLogger.error("Withdrawal failed", {
                 cardNumber,
@@ -136,12 +141,13 @@ router.post("/withdraw", authCheck, async (req: ExtendedWithdrawalRequest, res: 
         }
 
         transactionLogger.info("Withdrawal successful", {
+            transactionId,
             cardNumber,
             atmId,
-            transactionId,
             amount,
             currency,
             accountType,
+            atmLocation: result.data?.atmLocation,
             remainingBalance: result.data?.remainingBalance,
             transactionType: TransactionType.WITHDRAWAL
         });
@@ -187,9 +193,9 @@ router.post("/balance", authCheck, async (req: ExtendedBalanceRequest, res: Resp
     const cardNumber = customer.cards[0].cardNumber;
 
     transactionLogger.info("Balance check request received", {
+        transactionId,
         cardNumber,
         atmId,
-        transactionId,
         accountType,
         transactionType: TransactionType.BALANCE
     });
@@ -229,7 +235,9 @@ router.post("/balance", authCheck, async (req: ExtendedBalanceRequest, res: Resp
             transactionId,
             accountType,
             balance: result.data?.balance,
-            transactionType: TransactionType.BALANCE
+            transactionType: TransactionType.BALANCE,
+            atmLocation: result.data?.atm.location,
+            currency: result.data?.atm.currency
         });
 
         res.json({
@@ -264,4 +272,92 @@ router.post("/balance", authCheck, async (req: ExtendedBalanceRequest, res: Resp
     }
 });
 
-export default router; 
+// Deposit funds
+router.post("/deposit", authCheck, async (req: ExtendedDepositRequest, res: Response): Promise<void> => {
+    const { amount, currency, atmId, transactionId } = req.body;
+    const { customer, newToken } = req;
+    const cardNumber = customer.cards[0].cardNumber;
+
+    transactionLogger.info("Deposit request received", {
+        transactionId,
+        cardNumber,
+        atmId,
+        amount,
+        currency,
+        transactionType: TransactionType.DEPOSIT
+    });
+
+    try {
+        const result = await TransactionService.deposit(
+            cardNumber,
+            amount,
+            customer,
+            atmId
+        );
+        if (!result.success) {
+            transactionLogger.error("Deposit failed", {
+                cardNumber,
+                atmId,
+                transactionId,
+                amount,
+                currency,
+                reason: result.message,
+                transactionType: TransactionType.DEPOSIT
+            });
+            errorLogger.error("Deposit failed", {
+                cardNumber,
+                atmId,
+                transactionId,
+                amount,
+                currency,
+                reason: result.message
+            });
+            
+            res.status(400).json(result);
+            return;
+        }
+
+        transactionLogger.info("Deposit successful", {
+            transactionId,
+            cardNumber,
+            atmId,
+            amount,
+            currency,
+            atmLocation: result.data?.atm.location,
+            remainingBalance: result.data?.remainingBalance,
+            transactionType: TransactionType.DEPOSIT
+        });
+
+        res.json({
+            ...result,
+            data: {
+                ...result.data,
+                token: newToken
+            }
+        });
+    } catch (error) {
+        const errorMsg = "Internal server error during deposit";
+        transactionLogger.error(errorMsg, {
+            cardNumber,
+            atmId,
+            transactionId,
+            amount,
+            error: error instanceof Error ? error.message : "Unknown error",
+            transactionType: TransactionType.DEPOSIT
+        });
+        errorLogger.error(errorMsg, {
+            cardNumber,
+            atmId,
+            transactionId,
+            amount,
+            error: error instanceof Error ? error.message : "Unknown error"
+        });
+        
+        res.status(500).json({
+            success: false,
+            message: errorMsg
+        });
+    }
+});
+
+export default router;

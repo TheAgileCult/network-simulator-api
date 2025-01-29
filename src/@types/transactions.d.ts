@@ -12,7 +12,7 @@ declare global {
     interface WithdrawalRequest extends BaseTransactionRequest {
         amount: number;
         currency: string;
-        accountType: string;
+        accountType: AccountType;
     }
 
     interface AuthRequest extends BaseTransactionRequest {
@@ -20,7 +20,12 @@ declare global {
     }
 
     interface BalanceRequest extends BaseTransactionRequest {
-        accountType: string;
+        accountType: AccountType;
+    }
+
+    interface DepositRequest extends BaseTransactionRequest {
+        amount: number;
+        currency: string;
     }
 
     interface TransactionResult<T = unknown> {
@@ -50,6 +55,10 @@ declare global {
         accountType: string;
         token: string;
         currency: string;
+        atm: {
+            location: string;
+            currency: string;
+        }
     }
 
     interface WithdrawalResultData {
@@ -57,6 +66,7 @@ declare global {
         remainingBalance: number;
         token: string;
         currency: string;
+        atmLocation: string;
     }
 
     interface IATM {
@@ -67,6 +77,16 @@ declare global {
         lastUsed: Date;
     }
 
+    interface DepositResultData {
+        depositedAmount: number;
+        remainingBalance: number;
+        currency: string;
+        token: string;
+        atm: {
+            location: string;
+            currency: string;
+        }
+    }
 }
 
 export {};
