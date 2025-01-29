@@ -39,19 +39,34 @@ declare global {
     interface LoginResultData {
         token: string;
         customer: CustomerData;
+        atm: {
+            location: string;
+            currency: string;
+        }
     }
 
     interface BalanceResultData {
         balance: number;
         accountType: string;
         token: string;
+        currency: string;
     }
 
     interface WithdrawalResultData {
         withdrawnAmount: number;
         remainingBalance: number;
         token: string;
+        currency: string;
     }
+
+    interface IATM {
+        atmId: string;
+        location: string;
+        supportedCurrency: string;
+        availableCash: number;
+        lastUsed: Date;
+    }
+
 }
 
 export {};

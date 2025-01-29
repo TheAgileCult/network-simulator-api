@@ -32,7 +32,7 @@ router.post("/auth", async (req: ExtendedAuthRequest, res: Response): Promise<vo
     });
 
     try {
-        const result = await TransactionService.login(cardNumber, pin);
+        const result = await TransactionService.login(cardNumber, pin, atmId);
         
         if (!result.success) {
             transactionLogger.error("Authentication failed", {
@@ -106,7 +106,8 @@ router.post("/withdraw", authCheck, async (req: ExtendedWithdrawalRequest, res: 
             cardNumber,
             accountType,
             amount,
-            customer
+            customer,
+            atmId
         );
 
         if (!result.success) {
@@ -197,7 +198,8 @@ router.post("/balance", authCheck, async (req: ExtendedBalanceRequest, res: Resp
         const result = await TransactionService.checkBalance(
             cardNumber,
             accountType,
-            customer
+            customer,
+            atmId
         );
 
         if (!result.success) {
