@@ -4,6 +4,7 @@ import { connectDB } from "./db";
 import transactionRoutes from "./routes/transactions";
 import accountRoutes from "./routes/accounts";
 import { appLogger } from "./logger";
+import { updateRates } from "./updateRates";
 
 // Load environment variables
 dotenv.config();
@@ -32,6 +33,7 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 const startServer = async () => {
   try {
     await connectDB();
+    await updateRates();
 
     app.listen(port, () => {
       appLogger.debug(`Server is running on port ${port}`);
