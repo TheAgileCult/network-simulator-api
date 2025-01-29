@@ -11,12 +11,14 @@ declare global {
     }
 
     interface IAccount {
-        accountNumber: string;
-        accountType: "checking" | "savings" | "credit" | "loan";
-        balance: number;
-        currency: string;
-        isActive: boolean;
-        lastTransaction: Date;
+      accountNumber: string;
+      accountType: "checking" | "savings" | "credit" | "loan";
+      balance: number;
+      currency: "USD" | "EUR" | "GBP";
+      isActive: boolean;
+      lastTransaction: Date;
+      exchangeRates?: Map<string, number>;
+      lastRateUpdate?: Date;
     }
 
     interface ITransaction {

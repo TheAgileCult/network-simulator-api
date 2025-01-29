@@ -1,19 +1,9 @@
 import { faker } from "@faker-js/faker";
 import { connectDB } from "../db";
 import { Customer } from "../models/customers";
+import { ATM } from "../models/atms";
 import bcrypt from "bcrypt";
 import { appLogger } from "../logger";
-import { ATM } from "../models/atms";
-
-interface ICustomerData {
-    firstName: string;
-    lastName: string;
-    dateOfBirth: Date;
-    address: string;
-    accounts: IAccount[];
-    cards: ICard[];
-    transactions: ITransaction[];
-}
 
 // Constants
 const CITIES = [
@@ -38,43 +28,86 @@ const generateATMId = (index: number): string => {
 };
 
 const generateFakeATM = (index: number) => {
+    const supportedCurrencies = ["USD", "EUR", "GBP"];
     return {
         atmId: generateATMId(index),
         location: faker.helpers.arrayElement(CITIES),
-        supportedCurrency: "USD",
-        availableCash: faker.number.float({ min: 20000, max: 200000, fractionDigits: 2 })
+        supportedCurrencies,
+        availableCash: new Map(
+            supportedCurrencies.map(currency => [
+                currency,
+                faker.number.float({ min: 20000, max: 200000, fractionDigits: 2 })
+            ])
+        )
     };
 };
 
-const generateAccount = (accountType: IAccount["accountType"]) => ({
-    accountNumber: faker.string.numeric(12),
-    accountType,
-    balance: faker.number.float({ min: 1000, max: 10000, fractionDigits: 2 }),
-    currency: "USD",
-    isActive: true,
-    lastTransaction: faker.date.recent(),
-});
+const generateFakeAccount = (
+    currency: "USD" | "EUR" | "GBP", 
+    accountType: "checking" | "savings" | "credit" | "loan"
+) => {
+    return {
+        accountNumber: faker.string.numeric(12),
+        accountType,
+        balance: faker.number.float({ min: 1000, max: 10000, fractionDigits: 2 }),
+        currency,
+        isActive: true,
+        lastTransaction: faker.date.recent(),
+        exchangeRates: new Map([
+            ["USD", 1],
+            ["EUR", 0.85],
+            ["GBP", 0.73]
+        ]),
+        lastRateUpdate: new Date()
+    };
+};
 
 const generateCard = (cardNumber: string, hashedPin: string) => ({
     cardNumber,
     expiryDate: faker.date.future(),
     pin: hashedPin,
-    dailyWithdrawalLimit: 1000,
+    dailyWithdrawalLimit: faker.number.float({ min: 1000, max: 3000, fractionDigits: 2 }),
     isBlocked: false,
     lastUsed: faker.date.recent()
 });
 
-
-const generateFakeCustomer = async (customConfig: { cardNumber?: string; allAccountTypes?: boolean } = {}): Promise<ICustomerData> => {
+const generateFakeCustomer = async (
+    customConfig: { 
+        cardNumber?: string; 
+        allAccountTypes?: boolean;
+        multiCurrency?: boolean;
+    } = {}
+) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPin = await bcrypt.hash(DEFAULT_PIN, salt);
+    const cardNumber = customConfig.cardNumber || faker.string.numeric(16);
 
-    const cardNumber = customConfig.cardNumber || faker.finance.creditCardNumber();
+    let accounts = [];
     const accountTypes = ["checking", "savings", "credit", "loan"] as const;
-    
-    const accounts = customConfig.allAccountTypes
-        ? accountTypes.map(type => generateAccount(type))
-        : [generateAccount(faker.helpers.arrayElement(accountTypes))];
+    const currencies = ["USD", "EUR", "GBP"] as const;
+
+    if (customConfig.allAccountTypes && customConfig.multiCurrency) {
+        // Generate one account of each type for each currency
+        for (const currency of currencies) {
+            for (const accountType of accountTypes) {
+                accounts.push(generateFakeAccount(currency, accountType));
+            }
+        }
+    } else if (customConfig.allAccountTypes) {
+        // Generate one account of each type in USD
+        accounts = accountTypes.map(type => generateFakeAccount("USD", type));
+    } else if (customConfig.multiCurrency) {
+        // Generate one checking account for each currency
+        accounts = currencies.map(currency => generateFakeAccount(currency, "checking"));
+    } else {
+        // Generate a single random account
+        accounts = [
+            generateFakeAccount(
+                faker.helpers.arrayElement(currencies),
+                faker.helpers.arrayElement(accountTypes)
+            )
+        ];
+    }
 
     return {
         firstName: faker.person.firstName(),
@@ -83,8 +116,24 @@ const generateFakeCustomer = async (customConfig: { cardNumber?: string; allAcco
         address: faker.location.streetAddress(),
         accounts,
         cards: [generateCard(cardNumber, hashedPin)],
-        transactions: []
+        transactions: [],
     };
+};
+
+const logCustomerData = (customers: any[]) => {
+    customers.forEach((customer, index) => {
+        appLogger.info(`Test Customer ${index + 1}:`, {
+            name: `${customer.firstName} ${customer.lastName}`,
+            cardNumber: customer.cards[0].cardNumber,
+            accounts: customer.accounts.map((acc: any) => ({
+                number: acc.accountNumber,
+                type: acc.accountType,
+                currency: acc.currency,
+                balance: acc.balance
+            })),
+            pin: DEFAULT_PIN,
+        });
+    });
 };
 
 // Seeding Functions
@@ -111,16 +160,19 @@ const seedCustomers = async (count: number = DEFAULT_CUSTOMER_COUNT) => {
 
         const customers = [];
         
-        // Special customer with all account types
+        // Special customer with all account types and currencies
         const specialCustomer = await generateFakeCustomer({
             cardNumber: "1111222233334444",
-            allAccountTypes: true
+            allAccountTypes: true,
+            multiCurrency: true
         });
         customers.push(specialCustomer);
 
         // Regular customers
         for (let i = 1; i < count; i++) {
-            customers.push(await generateFakeCustomer());
+            customers.push(await generateFakeCustomer({
+                multiCurrency: faker.datatype.boolean() // Randomly give some customers multi-currency accounts
+            }));
         }
 
         await Customer.insertMany(customers);
@@ -131,20 +183,6 @@ const seedCustomers = async (count: number = DEFAULT_CUSTOMER_COUNT) => {
         appLogger.error("Error seeding customers:", error);
         throw error;
     }
-};
-
-const logCustomerData = (customers: ICustomerData[]) => {
-    customers.forEach((customer, index) => {
-        appLogger.info(`Test Customer ${index + 1}:`, {
-            name: `${customer.firstName} ${customer.lastName}`,
-            cardNumber: customer.cards[0].cardNumber,
-            accountNumbers: customer.accounts.map(acc => ({
-                number: acc.accountNumber,
-                type: acc.accountType
-            })),
-            pin: DEFAULT_PIN,
-        });
-    });
 };
 
 const seedDatabase = async (customerCount: number = DEFAULT_CUSTOMER_COUNT, atmCount: number = 10) => {

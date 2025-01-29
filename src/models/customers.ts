@@ -35,25 +35,43 @@ const CardSchema = new Schema<ICard>({
 });
 
 const AccountSchema = new Schema<IAccount>({
-    accountNumber: {
-        type: String,
-        required: true
-    },
-    accountType: {
-        type: String,
-        required: true,
-        enum: ["checking", "savings", "credit", "loan"]
-    },
-    balance: {
-        type: Number,
-        required: true,
-        min: 0
-    },
-    currency: {
-        type: String,
-        required: true,
-        default: "USD"
-    }
+  accountNumber: {
+    type: String,
+    required: true,
+  },
+  accountType: {
+    type: String,
+    required: true,
+    enum: ["checking", "savings", "credit", "loan"],
+  },
+  balance: {
+    type: Number,
+    required: true,
+    min: 0,
+  },
+  currency: {
+    type: String,
+    required: true,
+    enum: ["USD", "EUR", "GBP"],
+    default: "USD",
+  },
+  isActive: {
+    type: Boolean,
+    default: true,
+  },
+  lastTransaction: {
+    type: Date,
+    default: Date.now,
+  },
+  exchangeRates: {
+    type: Map,
+    of: Number,
+    default: new Map(),
+  },
+  lastRateUpdate: {
+    type: Date,
+    default: Date.now,
+  },
 });
 
 const CustomerSchema = new Schema<ICustomerDocument>({
@@ -113,5 +131,19 @@ CustomerSchema.path("accounts").validate(function (accounts: IAccount[]) {
     const uniqueAccountNumbers = new Set(accountNumbers);
     return accountNumbers.length === uniqueAccountNumbers.size;
 }, "Account numbers must be unique for each customer");
+
+// Add validation to ensure one account type per currency
+CustomerSchema.path("accounts").validate(function(accounts: IAccount[]) {
+    const accountTypeCurrency = new Set();
+    for (const account of accounts) {
+        const key = `${account.accountType}-${account.currency}`;
+        if (accountTypeCurrency.has(key)) {
+            return false; // Duplicate account type-currency combination found
+        }
+        accountTypeCurrency.add(key);
+    }
+    return true;
+}, "Cannot have multiple accounts of the same type in the same currency");
+
 
 export const Customer = mongoose.model<ICustomerDocument>("Customer", CustomerSchema); 

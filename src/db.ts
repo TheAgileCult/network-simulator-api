@@ -3,6 +3,8 @@ import dotenv from "dotenv";
 import { appLogger } from "./logger";
 
 dotenv.config();
+console.log("MongoDB URI:", process.env.MONGODB_URI);
+
 
 const MONGODB_URI = process.env.MONGODB_URI ?? "";
 
