@@ -4,20 +4,10 @@ import { transactionLogger, errorLogger } from "../logger";
 import { TransactionType } from "../logger";
 import CustomerRepository from "../repositories/customers";
 import { ATMRepository } from "../repositories/atms";
+import RatesJSON from "../../rates.json";
 
 const JWT_SECRET = process.env.JWT_SECRET || "default-secret-key";
 const JWT_EXPIRATION = process.env.JWT_EXPIRATION || "1h";
-
-interface CurrencyConversionResultData {
-    originalAmount: number;
-    convertedAmount: number;
-    fee: number;
-    totalDeduction: number;
-    fromCurrency: string;
-    toCurrency: string;
-    rate: number;
-    token: string;
-}
 
 export class TransactionService {
     private static WITHDRAWAL_LIMIT = 1000;
@@ -270,10 +260,10 @@ export class TransactionService {
             // Currency conversion if ATM currency differs from account currency
             let convertedAmount = amount;
             let conversionRate = 1;
-            const rates = require("../../rates.json");
-
+            const rates = RatesJSON["rates"];
             if (atm.supportedCurrency !== currency) {
-                if (!rates.rates[atm.supportedCurrency][currency]) {
+                /* @ts-expect-error Ignore JSON parsing error */
+                if (!rates[atm.supportedCurrency][currency]) {
                     const errorMsg = "Currency conversion not supported";
                     transactionLogger.error(errorMsg, {
                         fromCurrency: atm.supportedCurrency,
@@ -286,7 +276,8 @@ export class TransactionService {
                     };
                 }
 
-                conversionRate = rates.rates[atm.supportedCurrency][currency];
+                /* @ts-expect-error Ignore JSON parsing error */
+                conversionRate = rates[atm.supportedCurrency][currency];
                 convertedAmount = amount * conversionRate;
 
                 transactionLogger.info("Currency conversion applied", {
@@ -302,8 +293,6 @@ export class TransactionService {
             // Apply 2% fee only for foreign currency transactions
             const fee = atm.supportedCurrency !== currency ? convertedAmount * 0.02 : 0;
             const totalDeduction = convertedAmount + fee;
-
-            // Check sufficient balance in account including fee
             if (account.balance < totalDeduction) {
                 const errorMsg = "Insufficient funds in account (including fees)";
                 transactionLogger.error(errorMsg, {
@@ -410,9 +399,17 @@ export class TransactionService {
                 };
             }
 
-            const account = customer.accounts.find(
-                (acc) => acc.accountType === accountType
+            // First try to find account in ATM's currency
+            let account = customer.accounts.find(
+                (acc) => acc.accountType === accountType && acc.currency === atm.supportedCurrency
             );
+
+            // If no account in ATM's currency, find any account of the requested type
+            if (!account) {
+                account = customer.accounts.find(
+                    (acc) => acc.accountType === accountType
+                );
+            }
 
             if (!account) {
                 const errorMsg = "Account not found";
@@ -427,13 +424,52 @@ export class TransactionService {
                 };
             }
 
+            const balance = account.balance;
+            let convertedBalance = balance;
+            let conversionRate = 1;
+            const originalCurrency = account.currency;
+
+            // Perform currency conversion if needed
+            if (account.currency !== atm.supportedCurrency) {
+                const rates = RatesJSON["rates"];
+                /* @ts-expect-error Ignore JSON parsing error */
+                if (!rates[account.currency][atm.supportedCurrency]) {
+                    const errorMsg = "Currency conversion not supported";
+                    transactionLogger.error(errorMsg, {
+                        fromCurrency: account.currency,
+                        toCurrency: atm.supportedCurrency,
+                        transactionType: TransactionType.BALANCE
+                    });
+                    return {
+                        success: false,
+                        message: errorMsg
+                    };
+                }
+
+                /* @ts-expect-error Ignore JSON parsing error */
+                conversionRate = rates[account.currency][atm.supportedCurrency];
+                convertedBalance = balance * conversionRate;
+
+                transactionLogger.info("Currency conversion applied for balance", {
+                    fromCurrency: account.currency,
+                    toCurrency: atm.supportedCurrency,
+                    originalBalance: balance,
+                    convertedBalance,
+                    rate: conversionRate,
+                    transactionType: TransactionType.BALANCE
+                });
+            }
+
             transactionLogger.info("Balance check successful", {
                 cardNumber,
                 accountType,
-                balance: account.balance,
+                originalBalance: balance,
+                originalCurrency,
+                convertedBalance,
+                atmCurrency: atm.supportedCurrency,
+                conversionApplied: account.currency !== atm.supportedCurrency,
                 atmId,
                 atmLocation: atm.location,
-                currency: atm.supportedCurrency,
                 transactionType: TransactionType.BALANCE
             });
 
@@ -441,9 +477,12 @@ export class TransactionService {
                 success: true,
                 message: "Balance retrieved successfully",
                 data: {
-                    balance: account.balance,
+                    balance: convertedBalance,
+                    originalBalance: balance,
+                    originalCurrency,
                     accountType: account.accountType,
                     currency: atm.supportedCurrency,
+                    conversionRate: account.currency !== atm.supportedCurrency ? conversionRate : undefined,
                     token: jwt.sign(
                         {
                             cardNumber,
@@ -483,10 +522,10 @@ export class TransactionService {
         customerId: Types.ObjectId
     ): Promise<TransactionResult<CurrencyConversionResultData>> {
         try {
-            const rates = require("../../rates.json");
-
+            const rates = RatesJSON["rates"];
             // Validate currencies exist in rates
-            if (!rates.rates[fromCurrency] || !rates.rates[fromCurrency][toCurrency]) {
+            /* @ts-expect-error Ignore JSON parsing error */
+            if (!rates[fromCurrency] || !rates[fromCurrency][toCurrency]) {
                 const errorMsg = "Unsupported currency pair";
                 transactionLogger.error(errorMsg, {
                     fromCurrency,
@@ -499,7 +538,8 @@ export class TransactionService {
                 };
             }
 
-            const rate = rates.rates[fromCurrency][toCurrency];
+            /* @ts-expect-error Ignore JSON parsing error */
+            const rate = rates[fromCurrency][toCurrency];
             const convertedAmount = amount * rate;
 
             // Calculate fee if applicable (2% when applyFee is true)
@@ -538,7 +578,7 @@ export class TransactionService {
                     fromCurrency,
                     toCurrency,
                     rate,
-                    token
+                    token,
                 }
             };
         } catch (error) {
@@ -602,11 +642,19 @@ export class TransactionService {
                 };
             }
 
-            const account = customer.accounts.find((acc) => acc.accountType === "savings");
+            // Find savings account with matching currency
+            const account = customer.accounts.find(
+                (acc) => acc.accountType === "savings" && acc.currency === atm.supportedCurrency
+            );
+
             if (!account) {
-                const errorMsg = "Savings account not found";
+                const errorMsg = `No savings account found with ${atm.supportedCurrency} currency`;
                 transactionLogger.error(errorMsg, {
                     atmId,
+                    atmCurrency: atm.supportedCurrency,
+                    availableAccounts: customer.accounts
+                        .filter(acc => acc.accountType === "savings")
+                        .map(acc => acc.currency),
                     transactionType: TransactionType.DEPOSIT
                 });
                 return {
@@ -628,6 +676,7 @@ export class TransactionService {
                 atmId,
                 atmLocation: atm.location,
                 atmCurrency: atm.supportedCurrency,
+                accountCurrency: account.currency,
                 transactionType: TransactionType.DEPOSIT
             });
 

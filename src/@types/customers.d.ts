@@ -19,8 +19,6 @@ declare global {
       currency: "USD" | "EUR" | "GBP";
       isActive: boolean;
       lastTransaction: Date;
-      exchangeRates?: Map<string, number>;
-      lastRateUpdate?: Date;
     }
 
     interface ITransaction {

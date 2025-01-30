@@ -52,9 +52,12 @@ declare global {
 
     interface BalanceResultData {
         balance: number;
+        originalBalance?: number;
+        originalCurrency?: string;
         accountType: string;
         token: string;
         currency: string;
+        conversionRate?: number;
         atm: {
             location: string;
             currency: string;
@@ -69,7 +72,8 @@ declare global {
       accountCurrency: string;
       remainingBalance: number;
       token: string;
-      Atmcurrency: string;
+      atmCurrency: string;
+      atmLocation: string;
     }
 
     interface IATM {
@@ -85,10 +89,18 @@ declare global {
         remainingBalance: number;
         currency: string;
         token: string;
-        atm: {
-            location: string;
-            currency: string;
-        }
+        atmLocation: string;
+    }
+
+    interface CurrencyConversionResultData {
+        originalAmount: number;
+        convertedAmount: number;
+        fee: number;
+        totalDeduction: number;
+        fromCurrency: string;
+        toCurrency: string;
+        rate: number;
+        token: string;
     }
 }
 

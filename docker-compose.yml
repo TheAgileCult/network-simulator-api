@@ -1,4 +1,14 @@
 services:
+  rate-updater:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - API_KEY=${API_KEY}
+    command: npm run update-rates
+    volumes:
+      - ./rates.json:/app/rates.json
+
   visa-network:
     build: .
     ports:
@@ -11,8 +21,10 @@ services:
       - NETWORK_TYPE=VISA
     depends_on:
       - mongodb
+      - rate-updater
     volumes:
       - ./logs:/app/logs
+      - ./rates.json:/app/rates.json
 
   mastercard-network:
     build: .
@@ -26,8 +38,10 @@ services:
       - NETWORK_TYPE=MASTERCARD
     depends_on:
       - mongodb
+      - rate-updater
     volumes:
       - ./logs:/app/logs
+      - ./rates.json:/app/rates.json
 
   amex-network:
     build: .
@@ -41,8 +55,10 @@ services:
       - NETWORK_TYPE=AMEX
     depends_on:
       - mongodb
+      - rate-updater
     volumes:
       - ./logs:/app/logs
+      - ./rates.json:/app/rates.json
 
   mongodb:
     image: mongo:latest
