@@ -35,43 +35,34 @@ const CardSchema = new Schema<ICard>({
 });
 
 const AccountSchema = new Schema<IAccount>({
-  accountNumber: {
-    type: String,
-    required: true,
-  },
-  accountType: {
-    type: String,
-    required: true,
-    enum: ["checking", "savings", "credit", "loan"],
-  },
-  balance: {
-    type: Number,
-    required: true,
-    min: 0,
-  },
-  currency: {
-    type: String,
-    required: true,
-    enum: ["USD", "EUR", "GBP"],
-    default: "USD",
-  },
-  isActive: {
-    type: Boolean,
-    default: true,
-  },
-  lastTransaction: {
-    type: Date,
-    default: Date.now,
-  },
-  exchangeRates: {
-    type: Map,
-    of: Number,
-    default: new Map(),
-  },
-  lastRateUpdate: {
-    type: Date,
-    default: Date.now,
-  },
+    accountNumber: {
+        type: String,
+        required: true,
+    },
+    accountType: {
+        type: String,
+        required: true,
+        enum: ["checking", "savings", "credit", "loan"],
+    },
+    balance: {
+        type: Number,
+        required: true,
+        min: 0,
+    },
+    currency: {
+        type: String,
+        required: true,
+        enum: ["USD", "EUR", "GBP"],
+        default: "USD",
+    },
+    isActive: {
+        type: Boolean,
+        default: true,
+    },
+    lastTransaction: {
+        type: Date,
+        default: Date.now,
+    }
 });
 
 const CustomerSchema = new Schema<ICustomerDocument>({

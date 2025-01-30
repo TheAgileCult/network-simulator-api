@@ -7,7 +7,8 @@
     "start": "tsx src/index.ts",
     "dev": "tsx watch src/index.ts",
     "seed": "tsx src/scripts/seed-db.ts",
-    "build": "tsc"
+    "build": "tsc",
+    "update-rates": "tsx src/scripts/update-rates.ts"
   },
   "keywords": [],
   "author": "",

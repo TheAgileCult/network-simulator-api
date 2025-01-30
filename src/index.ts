@@ -5,7 +5,8 @@ import transactionRoutes from "./routes/transactions";
 import accountRoutes from "./routes/accounts";
 import { appLogger } from "./logger";
 import { NetworkType } from "./enums";
-import { updateRates } from "./updateRates";
+import { updateRates } from "./scripts/update-rates";
+import { authCheck } from "./middleware/authCheck";
 
 // Load environment variables
 dotenv.config();
@@ -25,7 +26,9 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Routes - mount the transaction routes under the network-specific path
-app.use(`/${networkType.toLowerCase()}`, transactionRoutes);
+app.use(`/${networkType.toLowerCase()}/transactions`, transactionRoutes);
+app.use(authCheck);
+app.use(`/${networkType.toLowerCase()}/users`, accountRoutes);
 
 // Health check endpoint
 app.get("/health", (_req: Request, res: Response) => {
@@ -36,33 +39,28 @@ app.get("/health", (_req: Request, res: Response) => {
     });
 });
 
-// Routes
-// Commenting out for now; will fix it later
-// app.use("/api/transactions", transactionRoutes);
-// app.use("/api/users", accountRoutes);
-
 // Error handling middleware
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  appLogger.error(err.stack);
-  res.status(500).json({
-    success: false,
-    message: "Internal server error",
-  });
+    appLogger.error(err.stack);
+    res.status(500).json({
+        success: false,
+        message: "Internal server error",
+    });
 });
 
 // Start server
 const startServer = async () => {
-  try {
-    await connectDB();
-    await updateRates();
+    try {
+        await connectDB();
+        await updateRates();
 
-    app.listen(port, () => {
-      appLogger.debug(`Server is running on port ${port}`);
-    });
-  } catch (error) {
-    appLogger.error("Error starting server:", error);
-    process.exit(1);
-  }
+        app.listen(port, () => {
+            appLogger.debug(`Server is running on port ${port}`);
+        });
+    } catch (error) {
+        appLogger.error("Error starting server:", error);
+        process.exit(1);
+    }
 };
 
 startServer();

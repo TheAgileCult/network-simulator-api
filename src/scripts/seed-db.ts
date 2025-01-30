@@ -34,14 +34,9 @@ const CITIES = [
 const DEFAULT_PIN = "1234";
 const DEFAULT_CUSTOMER_COUNT = 4;
 
-// Helper Functions
-const generateATMId = (index: number): string => {
-    return `ATM${String(index).padStart(4, "0")}`;
-};
-
 const generateFakeATM = (index: number) => {
     return {
-        atmId: generateATMId(index),
+        atmId: `ATM${String(index).padStart(4, "0")}`,
         location: faker.helpers.arrayElement(CITIES),
         supportedCurrency: faker.helpers.arrayElement(["USD", "EUR", "GBP"]),
         availableCash: faker.number.float({ min: 20000, max: 200000, fractionDigits: 2 }),
@@ -54,18 +49,12 @@ const generateFakeAccount = (
     accountType: "checking" | "savings" | "credit" | "loan"
 ) => {
     return {
-        accountNumber: faker.string.numeric(12),
+        accountNumber: faker.string.numeric(8),
         accountType,
         balance: faker.number.float({ min: 1000, max: 10000, fractionDigits: 2 }),
         currency,
         isActive: true,
         lastTransaction: faker.date.recent(),
-        exchangeRates: {
-            USD: 1,
-            EUR: 0.85,
-            GBP: 0.73
-        },
-        lastRateUpdate: new Date(),
     };
 };
 
@@ -96,7 +85,7 @@ const generateFakeCustomer = async (
     const cardNumber = customConfig.cardNumber || 
         faker.finance.creditCardNumber({ issuer: network.toLowerCase() });
 
-    const accountTypes = ["checking", "savings", "credit", "loan"] as const;
+    const accountTypes = ["checking", "savings", "credit", "loan"] as AccountType[];
     const currencies = ["USD", "EUR", "GBP"] as const;
 
     let accounts = [];
@@ -156,23 +145,16 @@ const logCustomerData = (customers: ICustomerData[], network: NetworkType) => {
 // Seeding Functions
 const seedATMs = async (count: number = 10) => {
     try {
-        // Connect to shared ATM database
         const sharedMongoUri = process.env.SHARED_MONGODB_URI || "mongodb://localhost:27017/shared-atm-network";
-        const sharedConnection = await mongoose.createConnection(sharedMongoUri);
-        
-        // Create ATM model on shared connection
+        const sharedConnection = mongoose.createConnection(sharedMongoUri);
         const SharedATM = sharedConnection.model("ATM", ATM.schema);
-        
         await SharedATM.deleteMany({});
         
         const atms = Array.from({ length: count }, (_, i) => 
             generateFakeATM(i + 1)
         );
-
         await SharedATM.insertMany(atms);
         appLogger.info(`${count} ATMs seeded successfully in shared database`);
-        
-        // Close shared connection
         await sharedConnection.close();
     } catch (error) {
         appLogger.error("Error seeding ATMs:", error);
@@ -186,14 +168,11 @@ const seedCustomersForNetwork = async (network: NetworkType, count: number = DEF
         appLogger.debug(`Cleared existing customer data for ${network} network`);
 
         const customers = [];
-
         const specialCardNumbers: Record<NetworkType, string> = {
             [NetworkType.VISA]: "4111111111111111",
             [NetworkType.MASTERCARD]: "5111111111111118",
             [NetworkType.AMEX]: "341111111111111"
         };        
-
-        // Special customer with all account types and multi-currency support
         const specialCustomer = await generateFakeCustomer(network, {
             cardNumber: specialCardNumbers[network],
             allAccountTypes: true,
@@ -201,16 +180,15 @@ const seedCustomersForNetwork = async (network: NetworkType, count: number = DEF
         });
         customers.push(specialCustomer);
 
-        // Regular customers
         for (let i = 1; i < count; i++) {
             customers.push(await generateFakeCustomer(network, {
-                multiCurrency: faker.datatype.boolean() // Randomly give some customers multi-currency accounts
+                // Randomly give some customers multi-currency accounts
+                multiCurrency: faker.datatype.boolean()
             }));
         }
 
         await Customer.insertMany(customers);
         logCustomerData(customers, network);
-        
         appLogger.debug(`Successfully seeded ${network} database with ${count} customers`);
     } catch (error) {
         appLogger.error(`Error seeding ${network} customers:`, error);
@@ -224,17 +202,13 @@ const seedDatabase = async (customerCount: number = DEFAULT_CUSTOMER_COUNT, atmC
         if (!networkType || !Object.values(NetworkType).includes(networkType)) {
             throw new Error("Invalid or missing NETWORK_TYPE environment variable");
         }
-
         await connectDB();
-        
         // Seed ATMs in shared database only when running as VISA network
         // to avoid duplicate ATM seeding
         if (networkType === NetworkType.VISA) {
             await seedATMs(atmCount);
         }
-        
         await seedCustomersForNetwork(networkType, customerCount);
-        
         appLogger.info(`Database seeded successfully for ${networkType} network`);
         process.exit(0);
     } catch (error) {
