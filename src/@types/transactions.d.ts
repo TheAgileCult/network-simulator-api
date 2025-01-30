@@ -53,10 +53,14 @@ declare global {
     }
 
     interface WithdrawalResultData {
-        withdrawnAmount: number;
-        remainingBalance: number;
-        token: string;
-        currency: string;
+      withdrawnAmount: number;
+      convertedAmount: number;
+      fee: number;
+      totalDeduction: number;
+      accountCurrency: string;
+      remainingBalance: number;
+      token: string;
+      Atmcurrency: string;
     }
 
     interface IATM {
