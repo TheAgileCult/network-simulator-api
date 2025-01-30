@@ -6,7 +6,73 @@ import CustomerRepository from "../repositories/customers";
 const router = Router();
 
 router.get(
-  "/:userId/accounts",
+  "/:userId/accountType/:currency",
+  authCheck,
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const { userId, currency } = req.params;
+
+    try {
+      const customer = await CustomerRepository.findCustomerById(userId);
+
+      if (!customer) {
+        errorLogger.error("Customer not found", {
+          userId,
+          currency,
+        });
+        res.status(404).json({
+          success: false,
+          message: "Customer not found",
+        });
+        return;
+      }
+
+      // Filter accounts by currency and map to account types
+      const accountTypes = customer.accounts
+        .filter((account: IAccount) => account.currency === currency)
+        .map((account: IAccount) => ({
+          accountType: account.accountType,
+          accountId: account.accountNumber,
+          balance: account.balance,
+        }));
+
+      if (accountTypes.length === 0) {
+        appLogger.info("No accounts found for specified currency", {
+          userId,
+          currency,
+        });
+        res.status(404).json({
+          success: false,
+          message: `No accounts found with currency ${currency}`,
+        });
+        return;
+      }
+
+      appLogger.info("Successfully retrieved account types by currency", {
+        userId,
+        currency,
+        accountCount: accountTypes.length,
+      });
+
+      res.json({
+        success: true,
+        data: accountTypes,
+      });
+    } catch (error) {
+      errorLogger.error("Error retrieving account types", {
+        userId,
+        currency,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+      res.status(500).json({
+        success: false,
+        message: "Error retrieving account types",
+      });
+    }
+  }
+);
+
+router.get(
+  "/:userId/currency",
   authCheck,
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const { userId } = req.params;
@@ -16,39 +82,39 @@ router.get(
 
       if (!customer) {
         errorLogger.error("Customer not found", {
-          userId
+          userId,
         });
         res.status(404).json({
           success: false,
-          message: "Customer not found"
+          message: "Customer not found",
         });
         return;
       }
 
-      const accounts = customer.accounts.map((account: IAccount) => ({
-        accountId: account.accountNumber,
-        accountType: account.accountType,
-        balance: account.balance,
-        currency: account.currency,
-      }));
+      // Get unique currencies from all accounts
+      const uniqueCurrencies = [
+        ...new Set(
+          customer.accounts.map((account: IAccount) => account.currency)
+        ),
+      ];
 
-      appLogger.info("Successfully retrieved user accounts", {
+      appLogger.info("Successfully retrieved user currencies", {
         userId,
-        accountCount: accounts.length,
+        currencyCount: uniqueCurrencies.length,
       });
 
       res.json({
         success: true,
-        data: accounts,
+        data: uniqueCurrencies,
       });
     } catch (error) {
-      errorLogger.error("Error retrieving user accounts", {
+      errorLogger.error("Error retrieving user currencies", {
         userId,
         error: error instanceof Error ? error.message : "Unknown error",
       });
       res.status(500).json({
         success: false,
-        message: "Error retrieving accounts",
+        message: "Error retrieving currencies",
       });
     }
   }
