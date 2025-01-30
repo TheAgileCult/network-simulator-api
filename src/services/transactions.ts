@@ -8,9 +8,20 @@ import { ATMRepository } from "../repositories/atms";
 const JWT_SECRET = process.env.JWT_SECRET || "default-secret-key";
 const JWT_EXPIRATION = process.env.JWT_EXPIRATION || "1h";
 
+interface CurrencyConversionResultData {
+    originalAmount: number;
+    convertedAmount: number;
+    fee: number;
+    totalDeduction: number;
+    fromCurrency: string;
+    toCurrency: string;
+    rate: number;
+    token: string;
+}
+
 export class TransactionService {
     private static WITHDRAWAL_LIMIT = 1000;
-  
+
     static async login(
         cardNumber: string,
         pin: string,
@@ -130,12 +141,14 @@ export class TransactionService {
             card.lastUsed = new Date();
             await customer.save();
 
-            // transactionLogger.info("Login successful", {
-            //     cardNumber,
-            //     customerId: customer._id,
-            //     atmId,
-            //     transactionType: TransactionType.AUTH
-            // });
+            transactionLogger.info("Login successful", {
+                cardNumber,
+                customerId: customer._id,
+                atmId,
+                transactionType: TransactionType.AUTH,
+                atmLocation: atm.location,
+                atmCurrency: atm.supportedCurrency
+            });
 
             return {
                 success: true,
@@ -175,9 +188,10 @@ export class TransactionService {
 
     static async withdraw(
         cardNumber: string,
-        accountType: AccountType,
+        accountType: string,
         amount: number,
         customer: ICustomer,
+        currency: string,
         atmId: string
     ): Promise<TransactionResult<WithdrawalResultData>> {
         try {
@@ -185,6 +199,7 @@ export class TransactionService {
                 cardNumber,
                 accountType,
                 amount,
+                currency,
                 atmId,
                 transactionType: TransactionType.WITHDRAWAL
             });
@@ -235,13 +250,14 @@ export class TransactionService {
             }
 
             const account = customer.accounts.find(
-                (acc) => acc.accountType === accountType
+                (acc) => acc.accountType === accountType && acc.currency === currency
             );
 
             if (!account) {
-                const errorMsg = "Account not found";
-                transactionLogger.error(errorMsg, { 
+                const errorMsg = "Account not found for specified currency and type";
+                transactionLogger.error(errorMsg, {
                     accountType,
+                    currency,
                     atmId,
                     transactionType: TransactionType.WITHDRAWAL
                 });
@@ -251,13 +267,49 @@ export class TransactionService {
                 };
             }
 
-            // Check sufficient balance in account
-            if (account.balance < amount) {
-                const errorMsg = "Insufficient funds in account";
+            // Currency conversion if ATM currency differs from account currency
+            let convertedAmount = amount;
+            let conversionRate = 1;
+            const rates = require("../../rates.json");
+
+            if (atm.supportedCurrency !== currency) {
+                if (!rates.rates[atm.supportedCurrency][currency]) {
+                    const errorMsg = "Currency conversion not supported";
+                    transactionLogger.error(errorMsg, {
+                        fromCurrency: atm.supportedCurrency,
+                        toCurrency: currency,
+                        transactionType: TransactionType.WITHDRAWAL
+                    });
+                    return {
+                        success: false,
+                        message: errorMsg
+                    };
+                }
+
+                conversionRate = rates.rates[atm.supportedCurrency][currency];
+                convertedAmount = amount * conversionRate;
+
+                transactionLogger.info("Currency conversion applied", {
+                    fromCurrency: atm.supportedCurrency,
+                    toCurrency: currency,
+                    originalAmount: amount,
+                    convertedAmount,
+                    rate: conversionRate,
+                    transactionType: TransactionType.WITHDRAWAL
+                });
+            }
+
+            // Apply 2% fee only for foreign currency transactions
+            const fee = atm.supportedCurrency !== currency ? convertedAmount * 0.02 : 0;
+            const totalDeduction = convertedAmount + fee;
+
+            // Check sufficient balance in account including fee
+            if (account.balance < totalDeduction) {
+                const errorMsg = "Insufficient funds in account (including fees)";
                 transactionLogger.error(errorMsg, {
                     cardNumber,
                     accountType,
-                    requested: amount,
+                    requested: totalDeduction,
                     available: account.balance,
                     atmId,
                     transactionType: TransactionType.WITHDRAWAL
@@ -271,27 +323,36 @@ export class TransactionService {
             // Process withdrawal from both ATM and account
             const newAtmAmount = atm.availableCash - amount;
             await ATMRepository.updateATMCash(atmId, newAtmAmount);
-            
-            account.balance -= amount;
+
+            account.balance -= totalDeduction;
             await customer.save();
 
-            // transactionLogger.info("Withdrawal successful", {
-            //     cardNumber,
-            //     accountType,
-            //     amount,
-            //     newBalance: account.balance,
-            //     atmId,
-            //     atmLocation: atm.location,
-            //     transactionType: TransactionType.WITHDRAWAL
-            // });
+            transactionLogger.info("Withdrawal successful", {
+                cardNumber,
+                accountType,
+                originalAmount: amount,
+                convertedAmount,
+                fee,
+                totalDeduction,
+                newBalance: account.balance,
+                atmId,
+                atmLocation: atm.location,
+                accountCurrency: currency,
+                atmCurrency: atm.supportedCurrency,
+                transactionType: TransactionType.WITHDRAWAL
+            });
 
             return {
                 success: true,
                 message: "Withdrawal successful",
                 data: {
                     withdrawnAmount: amount,
+                    convertedAmount,
+                    fee,
+                    totalDeduction,
                     remainingBalance: account.balance,
-                    currency: atm.supportedCurrency,
+                    atmCurrency: atm.supportedCurrency,
+                    accountCurrency: currency,
                     token: jwt.sign(
                         {
                             cardNumber,
@@ -322,7 +383,7 @@ export class TransactionService {
 
     static async checkBalance(
         cardNumber: string,
-        accountType: AccountType,
+        accountType: string,
         customer: ICustomer,
         atmId: string
     ): Promise<TransactionResult<BalanceResultData>> {
@@ -372,6 +433,7 @@ export class TransactionService {
                 balance: account.balance,
                 atmId,
                 atmLocation: atm.location,
+                currency: atm.supportedCurrency,
                 transactionType: TransactionType.BALANCE
             });
 
@@ -404,6 +466,90 @@ export class TransactionService {
                 atmId,
                 error: error instanceof Error ? error.message : "Unknown error",
                 transactionType: TransactionType.BALANCE
+            });
+            return {
+                success: false,
+                message: errorMsg
+            };
+        }
+    }
+
+    static async convertCurrency(
+        fromCurrency: string,
+        toCurrency: string,
+        amount: number,
+        cardNumber: string,
+        applyFee: boolean,
+        customerId: Types.ObjectId
+    ): Promise<TransactionResult<CurrencyConversionResultData>> {
+        try {
+            const rates = require("../../rates.json");
+
+            // Validate currencies exist in rates
+            if (!rates.rates[fromCurrency] || !rates.rates[fromCurrency][toCurrency]) {
+                const errorMsg = "Unsupported currency pair";
+                transactionLogger.error(errorMsg, {
+                    fromCurrency,
+                    toCurrency,
+                    transactionType: TransactionType.CURRENCY_CONVERSION
+                });
+                return {
+                    success: false,
+                    message: errorMsg
+                };
+            }
+
+            const rate = rates.rates[fromCurrency][toCurrency];
+            const convertedAmount = amount * rate;
+
+            // Calculate fee if applicable (2% when applyFee is true)
+            const fee = applyFee ? convertedAmount * 0.02 : 0;
+            const totalDeduction = convertedAmount + fee;
+
+            transactionLogger.info("Currency conversion calculated", {
+                fromCurrency,
+                toCurrency,
+                originalAmount: amount,
+                convertedAmount,
+                fee,
+                totalDeduction,
+                rate,
+                transactionType: TransactionType.CURRENCY_CONVERSION
+            });
+
+            // Generate JWT token
+            const token = jwt.sign(
+                {
+                    cardNumber,
+                    customerId,
+                },
+                JWT_SECRET,
+                { expiresIn: JWT_EXPIRATION }
+            );
+
+            return {
+                success: true,
+                message: "Currency conversion successful",
+                data: {
+                    originalAmount: amount,
+                    convertedAmount,
+                    fee,
+                    totalDeduction,
+                    fromCurrency,
+                    toCurrency,
+                    rate,
+                    token
+                }
+            };
+        } catch (error) {
+            const errorMsg = "Error processing currency conversion";
+            transactionLogger.error(errorMsg, {
+                cardNumber,
+                fromCurrency,
+                toCurrency,
+                amount,
+                error: error instanceof Error ? error.message : "Unknown error",
+                transactionType: TransactionType.CURRENCY_CONVERSION
             });
             return {
                 success: false,
@@ -475,14 +621,15 @@ export class TransactionService {
             account.balance += amount;
             await customer.save();
 
-            // transactionLogger.info("Deposit processed successfully", {
-            //     cardNumber,
-            //     amount,
-            //     newBalance: account.balance,
-            //     atmId,
-            //     atmLocation: atm.location,
-            //     transactionType: TransactionType.DEPOSIT
-            // });
+            transactionLogger.info("Deposit successful", {
+                cardNumber,
+                amount,
+                newBalance: account.balance,
+                atmId,
+                atmLocation: atm.location,
+                atmCurrency: atm.supportedCurrency,
+                transactionType: TransactionType.DEPOSIT
+            });
 
             return {
                 success: true,
@@ -499,10 +646,7 @@ export class TransactionService {
                         JWT_SECRET,
                         { expiresIn: JWT_EXPIRATION }
                     ),
-                    atm: {
-                        location: atm.location,
-                        currency: atm.supportedCurrency
-                    }
+                    atmLocation: atm.location
                 }
             };
         } catch (error) {
@@ -528,4 +672,4 @@ export class TransactionService {
     private static isValidDepositAmount(amount: number): boolean {
         return amount > 0;
     }
-} 
+}

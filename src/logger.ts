@@ -17,7 +17,8 @@ export enum TransactionType {
     AUTH = "AUTH",
     WITHDRAWAL = "WITHDRAWAL",
     DEPOSIT = "DEPOSIT",
-    BALANCE = "BALANCE"
+    BALANCE = "BALANCE",
+    CURRENCY_CONVERSION = "CURRENCY_CONVERSION"
 }
 
 // Color scheme for different log levels
