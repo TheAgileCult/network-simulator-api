@@ -4,21 +4,42 @@ import { connectDB } from "./db";
 import transactionRoutes from "./routes/transactions";
 import accountRoutes from "./routes/accounts";
 import { appLogger } from "./logger";
+import { NetworkType } from "./enums";
 import { updateRates } from "./updateRates";
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
-const port = process.env.PORT || 8080;
+const port = process.env.PORT || 3001;
+const networkType = process.env.NETWORK_TYPE as NetworkType;
+
+// Validate network type
+if (!networkType || !Object.values(NetworkType).includes(networkType)) {
+    appLogger.error("Invalid or missing NETWORK_TYPE environment variable");
+    process.exit(1);
+}
 
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Routes - mount the transaction routes under the network-specific path
+app.use(`/${networkType.toLowerCase()}`, transactionRoutes);
+
+// Health check endpoint
+app.get("/health", (_req: Request, res: Response) => {
+    res.json({ 
+        status: "ok",
+        network: networkType,
+        timestamp: new Date().toISOString()
+    });
+});
+
 // Routes
-app.use("/api/transactions", transactionRoutes);
-app.use("/api/users", accountRoutes);
+// Commenting out for now; will fix it later
+// app.use("/api/transactions", transactionRoutes);
+// app.use("/api/users", accountRoutes);
 
 // Error handling middleware
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
