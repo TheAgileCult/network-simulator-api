@@ -47,6 +47,7 @@ declare global {
         atm: {
             location: string;
             currency: string;
+            availableCash: number;
         }
     }
 

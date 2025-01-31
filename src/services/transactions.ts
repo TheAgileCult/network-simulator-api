@@ -152,7 +152,8 @@ export class TransactionService {
                     },
                     atm: {
                         location: atm.location,
-                        currency: atm.supportedCurrency
+                        currency: atm.supportedCurrency,
+                        availableCash: atm.availableCash
                     }
                 },
             };
@@ -644,16 +645,16 @@ export class TransactionService {
 
             // Find savings account with matching currency
             const account = customer.accounts.find(
-                (acc) => acc.accountType === "savings" && acc.currency === atm.supportedCurrency
+                (acc) => (acc.accountType === "savings" || acc.accountType === "checking") && acc.currency === atm.supportedCurrency
             );
 
             if (!account) {
-                const errorMsg = `No savings account found with ${atm.supportedCurrency} currency`;
+                const errorMsg = `No savings or checking account found with ${atm.supportedCurrency} currency`;
                 transactionLogger.error(errorMsg, {
                     atmId,
                     atmCurrency: atm.supportedCurrency,
                     availableAccounts: customer.accounts
-                        .filter(acc => acc.accountType === "savings")
+                        .filter(acc => (acc.accountType === "savings" || acc.accountType === "checking"))
                         .map(acc => acc.currency),
                     transactionType: TransactionType.DEPOSIT
                 });
