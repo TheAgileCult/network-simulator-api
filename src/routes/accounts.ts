@@ -10,7 +10,6 @@ router.get(
         const { currency } = req.params;
 
         try {
-            console.log(req.customer);
             const result = await AccountService.getAccountTypesByCurrency(req.customer._id, currency);
             if (!result.success) {
                 res.status(404).json(result);
